@@ -1,0 +1,454 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id            Int        @id @default(autoincrement())
+  shopifyDomain String     @unique
+  name          String?
+  currency      String?    @default("USD") // Update: String to Decimal
+  // currency      Decimal?   @default("USD") // Update: String to Decimal
+  timezone      String?    @default("UTC")
+  isActive      Boolean    @default(true)
+  scanStatus    ScanStatus @default(IDLE)
+  scanStartedAt DateTime?
+  lastScanError String?
+  installedAt   DateTime   @default(now())
+  uninstalledAt DateTime?
+
+  appSettings        AppSetting?
+  dashboardSnapshots DashboardSnapshot[]
+  collectionHealths  CollectionHealth[]
+  topIssueSummaries  TopIssueSummary[]
+  scanJobs           ScanJob[]
+  scans              Scan[]
+
+  @@index([shopifyDomain])
+}
+
+model AppSetting {
+  id                String   @id @default(uuid())
+  shopId            Int      @unique
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  highPenalty       Int      @default(15)
+  mediumPenalty     Int      @default(5)
+  lowPenalty        Int      @default(2)
+  maxHighPenalty    Int      @default(60)
+  maxMediumPenalty  Int      @default(30)
+  maxLowPenalty     Int      @default(10)
+  autoReconcileDays Int      @default(7)
+  disabledRuleIds   String   @default("[]")
+  autoScanEnabled   Boolean  @default(false) // New
+  createdAt         DateTime @default(now()) // New
+  updatedAt         DateTime @updatedAt
+}
+
+model Product {
+  id            String          @id
+  // shopId        Int // New
+  // shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  title         String
+  featuredImage String? // Update: String to Json
+  // featuredImage Json? // Update: String to Json
+  status        InventoryStatus @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  variants    Variant[]
+  issues      ProductIssue[] // Update: productIssues to issues
+  collections ProductCollection[]
+  categories  ProductCategory[]
+
+  // @@index([shopId])
+  // @@index([shopId, status])
+  // @@index([shopId, title])
+  @@index([status]) // Remove: After shopId avtive
+}
+
+model Variant {
+  id        String          @id
+  productId String
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title     String
+  sku       String?
+  status    InventoryStatus @default(ACTIVE) // New
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  variantIssues VariantIssue[]
+
+  @@index([productId])
+}
+
+model Collection {
+  id        String   @id
+  // shopId        Int // New
+  // shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  title     String
+  handle    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products ProductCollection[]
+  healths  CollectionHealth[]
+
+  // @@index([shopId])
+  // @@index([shopId, title])
+  @@index([title])
+}
+
+model ProductCollection {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  // shopId        Int // New
+  // shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String    @unique
+  // handle    String     @unique // Update: slug to handle
+  parentId  Int?
+  parent    Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  children Category[]        @relation("CategoryHierarchy")
+  products ProductCategory[]
+
+  // @@index([shopId])
+  // @@index([shopId, name])
+  // @@index([parentId])
+}
+
+model ProductCategory {
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // @@index([categoryId])
+  @@id([productId, categoryId])
+}
+
+model Issue {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  name        String
+  summary     String
+  description String
+  category    String
+  severity    Severity @default(LOW)
+  priority    Priority @default(improvement)
+  tone        Tone     @default(info)
+  impact      String
+  alert       String
+  // enabled     Boolean  @default(true) // New
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productIssues     ProductIssue[]
+  variantIssues     VariantIssue[]
+  issueTrends       IssueTrend[]
+  // trends            IssueTrend[]
+  topIssueSummaries TopIssueSummary[] // Remove: will remove after IssueTrend implemented
+
+  // @@index([enabled])
+  // @@index([severity])
+  @@index([slug])
+}
+
+model ProductIssue {
+  id         String    @id @default(cuid())
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  issueId    Int
+  issue      Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details    String?
+  // details   Json? // Update: String to Json
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+
+  @@unique([productId, issueId])
+  @@index([productId])
+  @@index([issueId])
+}
+
+model VariantIssue {
+  id         String    @id @default(cuid())
+  variantId  String
+  variant    Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  issueId    Int
+  issue      Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details    String?
+  // details   Json? // Update: String to Json
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+
+  @@unique([variantId, issueId])
+  @@index([variantId])
+  @@index([issueId])
+}
+
+model IssueTrend {
+  id           String   @id @default(cuid())
+  // shopId    Int
+  // shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  issueId      Int
+  issue        Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  productCount Int      @default(0)
+  variantCount Int      @default(0)
+  // count        Int             @default(0)
+  // status       InventoryStatus @default(ACTIVE)
+  date         DateTime @default(now()) // Always normalized to the beginning of the day.
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // @@index([shopId, date])
+  // @@unique([shopId, issueId, status, date])
+  @@unique([issueId, date])
+  @@index([date])
+  @@index([issueId])
+}
+
+// will remove after IssueTrend implemented
+model TopIssueSummary {
+  id        String          @id @default(cuid())
+  shopId    Int
+  shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  issueId   Int
+  issue     Issue           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  count     Int             @default(0)
+  status    InventoryStatus @default(ACTIVE)
+  date      DateTime        @default(now())
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([shopId, issueId, status, date])
+  @@index([shopId, date])
+}
+
+// will remove after Scan implemented
+model DashboardSnapshot {
+  id                     String    @id @default(cuid())
+  shopId                 Int
+  shop                   Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  status                 String    @default("completed")
+  scanType               ScanType  @default(full)
+  startedAt              DateTime  @default(now())
+  completedAt            DateTime?
+  healthScore            Int?
+  totalProducts          Int       @default(0)
+  healthyProducts        Int       @default(0)
+  needsAttentionProducts Int       @default(0)
+  criticalProducts       Int       @default(0)
+  totalIssues            Int       @default(0)
+  highIssues             Int       @default(0)
+  mediumIssues           Int       @default(0)
+  lowIssues              Int       @default(0)
+  errorMessage           String?
+  createdAt              DateTime  @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([shopId, status, completedAt])
+}
+
+model CollectionHealth {
+  id           String     @id @default(cuid())
+  shopId       Int
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  date         DateTime   @default(now())
+  score        Int        @default(100)
+  // healthScore            Int?
+  // totalProducts          Int        @default(0)
+  // healthyProducts        Int        @default(0)
+  // needsAttentionProducts Int        @default(0)
+  // criticalProducts       Int        @default(0)
+  // totalIssues Int @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([collectionId, date])
+  @@index([shopId, date])
+}
+
+// New: Future represents background work requested by the application, will replace table scanStatus in Shop model
+model ScanJob {
+  id           String     @id @default(cuid())
+  shopId       Int
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type         ScanType   @default(full)
+  status       ScanStatus @default(IDLE)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  scan Scan?
+
+  @@index([shopId, status, createdAt])
+  @@index([shopId, createdAt])
+}
+
+// New: Will replace DashboardSnapshot model
+model Scan {
+  id                     String     @id @default(cuid())
+  shopId                 Int
+  shop                   Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  scanJobId              String?    @unique
+  scanJob                ScanJob?   @relation(fields: [scanJobId], references: [id], onDelete: SetNull)
+  status                 ScanStatus @default(IDLE)
+  type                   ScanType   @default(full)
+  healthScore            Int?
+  totalProducts          Int        @default(0)
+  healthyProducts        Int        @default(0)
+  needsAttentionProducts Int        @default(0)
+  criticalProducts       Int        @default(0)
+  totalIssues            Int        @default(0)
+  highIssues             Int        @default(0)
+  mediumIssues           Int        @default(0)
+  lowIssues              Int        @default(0)
+  errorMessage           String?
+  startedAt              DateTime
+  completedAt            DateTime? // Always normalized to the beginning of the day.
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+  @@index([shopId, completedAt])
+}
+
+enum ScanStatus {
+  IDLE
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// Update: ProductStatus to InventoryStatus
+enum InventoryStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Priority {
+  improvement
+  needs_attention
+  critical
+}
+
+enum Tone {
+  info
+  warning
+  critical
+}
+
+enum ScanType {
+  full
+  manual
+  incremental
+  part
+}
+
+    //             ┌─────────────┐
+    //             │   ScanJob   │
+    //             └──────┬──────┘
+    //                    │
+    //                 Worker
+    //                    │
+    //                    ▼
+    //             ┌─────────────┐
+    //             │    Scan     │
+    //             └──────┬──────┘
+    //                    │
+    //           ┌────────┴────────┐
+    //           ▼                 ▼
+    //     Current State       Aggregation
+    //           │                 │
+    //    ┌──────┴──────┐    ┌─────┴────────┐
+    //    ▼             ▼    ▼              ▼
+    // Product       Variant IssueTrend CollectionHealth
+    //    │             │
+    //    └──────┬──────┘
+    //           ▼
+    //    ProductIssue
+    //    VariantIssue
+
+//Shop
+// │
+// ├── AppSetting
+// │
+// ├── ScanJob
+// │     │
+// │     └── Scan
+// │
+// ├── Product
+// │     │
+// │     ├── Variant
+// │     │
+// │     ├── ProductIssue
+// │     │       └── Issue
+// │     │
+// │     ├── ProductCollection
+// │     │       └── Collection
+// │     │
+// │     └── ProductCategory
+// │
+// ├── Collection
+// │     └── CollectionHealth
+// │
+// └── IssueTrend
+
+// Issue
+// ├── ProductIssue
+// ├── VariantIssue
+// └── IssueTrend

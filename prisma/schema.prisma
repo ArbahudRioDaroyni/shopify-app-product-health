@@ -1,0 +1,280 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id            Int        @id @default(autoincrement())
+  shopifyDomain String     @unique
+  name          String?
+  currency      String?    @default("USD")
+  timezone      String?    @default("UTC")
+  isActive      Boolean    @default(true)
+  scanStatus    ScanStatus @default(IDLE)
+  scanStartedAt DateTime?
+  lastScanError String?
+  installedAt   DateTime   @default(now())
+  uninstalledAt DateTime?
+
+  appSettings        AppSetting?
+  dashboardSnapshots DashboardSnapshot[]
+  collectionHealths  CollectionHealth[]
+  issueTrends        IssueTrend[]
+
+  @@index([shopifyDomain])
+}
+
+enum ScanStatus {
+  IDLE
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model AppSetting {
+  id                String   @id @default(uuid())
+  shopId            Int      @unique
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  highPenalty       Int      @default(15)
+  mediumPenalty     Int      @default(5)
+  lowPenalty        Int      @default(2)
+  maxHighPenalty    Int      @default(60)
+  maxMediumPenalty  Int      @default(30)
+  maxLowPenalty     Int      @default(10)
+  autoReconcileDays Int      @default(7)
+  disabledRuleIds   String   @default("[]")
+  updatedAt         DateTime @updatedAt
+}
+
+model Product {
+  id            String              @id
+  title         String
+  status        InventoryStatus     @default(ACTIVE)
+  featuredImage String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  variants      Variant[]
+  productIssues ProductIssue[]
+  collections   ProductCollection[]
+  categories    ProductCategory[]
+
+  @@index([status])
+}
+
+enum InventoryStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+model Variant {
+  id            String         @id
+  productId     String
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title         String
+  sku           String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  variantIssues VariantIssue[]
+
+  @@index([productId])
+}
+
+model Collection {
+  id        String   @id
+  title     String
+  handle    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products ProductCollection[]
+  healths  CollectionHealth[]
+}
+
+model Issue {
+  id            Int            @id @default(autoincrement())
+  slug          String         @unique
+  name          String
+  summary       String
+  description   String
+  category      String
+  severity      Severity       @default(LOW)
+  priority      Priority       @default(improvement)
+  tone          Tone           @default(info)
+  impact        String
+  alert         String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  productIssues ProductIssue[]
+  variantIssues VariantIssue[]
+  issueTrends   IssueTrend[]
+
+  @@index([slug])
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Priority {
+  improvement
+  needs_attention
+  critical
+}
+
+enum Tone {
+  info
+  warning
+  critical
+}
+
+model ProductIssue {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  issueId   Int
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@unique([productId, issueId])
+  @@index([productId])
+  @@index([issueId])
+}
+
+model VariantIssue {
+  id        String   @id @default(cuid())
+  variantId String
+  variant   Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  issueId   Int
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@unique([variantId, issueId])
+  @@index([variantId])
+  @@index([issueId])
+}
+
+model IssueTrend {
+  id        String          @id @default(cuid())
+  shopId    Int
+  shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  issueId   Int
+  issue     Issue           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  count     Int             @default(0)
+  status    InventoryStatus @default(ACTIVE)
+  date      DateTime        @default(now())
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([shopId, issueId, status, date])
+  @@index([shopId, date])
+}
+
+model DashboardSnapshot {
+  id                     String    @id @default(cuid())
+  shopId                 Int
+  shop                   Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  status                 String    @default("completed")
+  scanType               ScanType  @default(full)
+  startedAt              DateTime  @default(now())
+  completedAt            DateTime?
+  healthScore            Int?
+  totalProducts          Int       @default(0)
+  healthyProducts        Int       @default(0)
+  needsAttentionProducts Int       @default(0)
+  criticalProducts       Int       @default(0)
+  totalIssues            Int       @default(0)
+  highIssues             Int       @default(0)
+  mediumIssues           Int       @default(0)
+  lowIssues              Int       @default(0)
+  errorMessage           String?
+  createdAt              DateTime  @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([shopId, status, completedAt])
+}
+
+enum ScanType {
+  full
+  manual
+  incremental
+  part
+}
+
+model CollectionHealth {
+  id           String     @id @default(cuid())
+  shopId       Int
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  date         DateTime   @default(now())
+  score        Int        @default(100)
+  createdAt    DateTime   @default(now())
+
+  @@unique([collectionId, date])
+  @@index([shopId, date])
+}
+
+model ProductCollection {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  name     String
+  slug     String     @unique
+  parentId Int? // DIPERBAIKI: Disesuaikan ke Int?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  products ProductCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductCategory {
+  productId  String
+  categoryId Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+}
