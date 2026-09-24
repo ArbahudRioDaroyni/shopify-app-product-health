@@ -17,7 +17,7 @@ export async function saveBulkCatalogScan({ shopId, scanResults, scanType = "ful
       await tx.variantIssue.deleteMany({});
 
       for (const item of scanResults) {
-        await syncProductOrVariantAndIssues({db: tx, item});
+        await syncProductOrVariantAndIssues({db: tx, shopId, item});
         // await syncProductCollectionsAndCategory({db: tx, item});
       }
 
@@ -61,7 +61,7 @@ export async function savePartialCatalogScan({
       });
 
       for (const item of scanResults) {
-        await syncProductOrVariantAndIssues({db: tx, item});
+        await syncProductOrVariantAndIssues({db: tx, shopId, item});
       }
     }
 
@@ -70,30 +70,17 @@ export async function savePartialCatalogScan({
   });
 }
 
-// function convertToSlug({text}) {
-//   if (!text) return "";
-//   return text
-//     .toString()
-//     .normalize("NFD")
-//     .replace(/[\u0300-\u036f]/g, "")
-//     .toLowerCase()
-//     .trim()
-//     .replace(/[^a-z0-9 -]/g, "")
-//     .replace(/\s+/g, "-")
-//     .replace(/-+/g, "-");
-// }
-
-async function syncProductOrVariantAndIssues({db, item}) {
-  const product = await upsertProduct({db, item});
+async function syncProductOrVariantAndIssues({db, shopId, item}) {
+  const product = await upsertProduct({db, shopId, item});
   const issue = await upsertIssue({db, item});
 
   if (!issue) return product;
 
   if (item.variantId || item.variantLegacyResourceId) {
-    const variant = await upsertVariant({db, item, product});
-    upsertVariantIssue({db, variant, issue, issueDetails: JSON.stringify(item.details)});
+    const variant = await upsertVariant({db, shopId, item, product});
+    upsertVariantIssue({db, shopId, variant, issue, issueDetails: JSON.stringify(item.details)});
   } else {
-    upsertProductIssue({db, product, issue, issueDetails: JSON.stringify(item.details)});
+    upsertProductIssue({db, shopId, product, issue, issueDetails: JSON.stringify(item.details)});
   }
 
   return product;

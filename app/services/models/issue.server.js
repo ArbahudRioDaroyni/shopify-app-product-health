@@ -1,12 +1,23 @@
 import db from "../../db.server.js";
 import { rules } from "../rules/index.js";
+import { convertToSlug } from "../../utils/formatters.js";
 
-export async function getIssueById(id) {
+export async function getIssueDetailsById({ id, page = 1, pageSize = 10 }) {
   const safeId = parseInt(id);
-  return await db.issue.findUniqueOrThrow({
+  const skip = (page - 1) * pageSize;
+
+  const issue = await db.issue.findUniqueOrThrow({
     where: { id: safeId },
 		include: {
+      _count: {
+        select: {
+          productIssues: true,
+          variantIssues: true,
+        },
+      },
 			productIssues: {
+        skip,
+        take: pageSize,
         include: {
           product: {
             include: {
@@ -17,15 +28,17 @@ export async function getIssueById(id) {
                       id: true,
                       name: true,
                       tone: true,
-                    }
-                  }
-                }
+                    },
+                  },
+                },
               },
-            }
-          }
-        }
+            },
+          },
+        },
       },
 			variantIssues: {
+        skip,
+        take: pageSize,
         include: {
           variant: {
             include: {
@@ -36,9 +49,9 @@ export async function getIssueById(id) {
                       id: true,
                       name: true,
                       tone: true,
-                    }
-                  }
-                }
+                    },
+                  },
+                },
               },
               product: true,
             }
@@ -47,20 +60,13 @@ export async function getIssueById(id) {
       },
 		}
   });
-}
 
-export async function getIssueDetailsById({id}) {
-  let issue = await getIssueById(id);
-  const listIssue = issue.productIssues.length === 0 ? issue.variantIssues : issue.productIssues;
-  const issueFromProductOrVariant = issue.productIssues.length === 0 ? 'variant' : 'product';
-
-  issue.severity = issue.severity.charAt(0).toUpperCase() + issue.severity.slice(1).toLowerCase();
-  issue.priority = toTitleCase(issue.priority);
-  issue.count = listIssue.length;
-  issue.type = issueFromProductOrVariant;
+  issue.count = issue._count.productIssues || issue._count.variantIssues;
+  issue.type = issue._count.productIssues > 0 ? 'product' : 'variant';
+  issue.data = issue._count.productIssues > 0 ? issue.productIssues : issue.variantIssues;
   delete issue.variantIssues;
   delete issue.productIssues;
-  issue.data = listIssue;
+  delete issue._count;
 
   return issue;
 }
@@ -73,16 +79,7 @@ export async function upsertIssue({db, item}) {
 	const rule = ruleBySlug.find(rule => rule.id === slug);
   const issue = await db.issue.upsert({
     where: { slug },
-    update: {
-      summary: rule.summary || undefined,
-      description: rule.description || undefined,
-      category: rule.category || undefined,
-      severity: rule.severity || undefined,
-      priority: rule.priority || undefined,
-      impact: rule.impact || undefined,
-      alert: rule.alert || undefined,
-      tone: rule.tone || undefined,
-    },
+    update: {},
     create: {
       slug,
       name,
@@ -252,25 +249,3 @@ export async function getIssueTrends() {
 const ruleBySlug = rules.map((rule) => ({
 	...rule,
 }));
-
-function convertToSlug(text) {
-  if (!text) return "";
-  return text
-    .toString()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9 -]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
-
-function toTitleCase(str) {
-  return str
-    .replace('_', ' ')
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}

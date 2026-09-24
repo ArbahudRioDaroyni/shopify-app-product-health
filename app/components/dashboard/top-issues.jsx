@@ -4,14 +4,14 @@ import { TrendsChart } from "../chart";
 const MAX_ISSUES_PER_CATEGORY = 2;
 
 const PRODUCT_STATUS_FILTERS = [
-  { key: "all", label: "All Status" },
+  { key: "all", label: "All" },
   { key: "ACTIVE", label: "Active" },
   { key: "DRAFT", label: "Draft" },
   { key: "ARCHIVED", label: "Archive" },
 ];
 
 const ISSUE_FILTERS = [
-  { key: "all", label: "All Severity" },
+  { key: "all", label: "All" },
   { key: "critical", label: "Critical" },
   { key: "warning", label: "Warning" },
   { key: "info", label: "Improvement" },
@@ -72,47 +72,49 @@ export default function TopIssues({ data = [] }) {
   }, [data, activeProductStatus]);
 
   return (
-    <s-section heading="Top Issues">
+    <s-section accessibilityLabel="Top Issues">
+      <s-grid gridTemplateColumns="1fr auto" gap="small-200" alignItems="center" paddingBlockEnd="base">
+        <s-heading>Top Issues</s-heading>
+
+        {/* Filter Dropdowns */}
+        <s-stack direction="inline" gap="small-300" alignItems="center">
+          {/* Severity Filter */}
+          <s-button commandFor="top-issues-severity-menu" variant="secondary">
+            Issue: {ISSUE_FILTERS.find((f) => f.key === activeIssueFilter)?.label}
+          </s-button>
+          <s-menu id="top-issues-severity-menu" accessibilityLabel="Issue severity filter">
+            {ISSUE_FILTERS.map((filter) => (
+              <s-button
+                key={filter.key}
+                icon={activeIssueFilter === filter.key ? "check" : undefined}
+                onClick={() => setActiveIssueFilter(filter.key)}
+                accessibilityLabel="Select severity issue for filter"
+              >
+                {filter.label} ({issueFilterCounts[filter.key] || 0})
+              </s-button>
+            ))}
+          </s-menu>
+
+          {/* Product Status Filter */}
+          <s-button commandFor="top-issues-status-menu" variant="secondary">
+            Status: {PRODUCT_STATUS_FILTERS.find((f) => f.key === activeProductStatus)?.label}
+          </s-button>
+          <s-menu id="top-issues-status-menu" accessibilityLabel="Product status filter">
+            {PRODUCT_STATUS_FILTERS.map((filter) => (
+              <s-button
+                key={filter.key}
+                icon={activeProductStatus === filter.key ? "check" : undefined}
+                onClick={() => setActiveProductStatus(filter.key)}
+                accessibilityLabel="Select product status issue for filter"
+              >
+                {filter.label}
+              </s-button>
+            ))}
+          </s-menu>
+        </s-stack>
+      </s-grid>
       <s-grid gridTemplateColumns="1fr auto" gap="small-200" alignItems="center">
         <s-grid gap="large-100">
-          
-          {/* Filter Dropdowns */}
-          <s-stack direction="inline" gap="small-300" alignItems="center">
-            {/* Severity Filter */}
-            <s-button commandFor="top-issues-severity-menu" variant="secondary">
-              Issue: {ISSUE_FILTERS.find((f) => f.key === activeIssueFilter)?.label}
-            </s-button>
-            <s-menu id="top-issues-severity-menu" accessibilityLabel="Issue severity filter">
-              {ISSUE_FILTERS.map((filter) => (
-                <s-button
-                  key={filter.key}
-                  icon={activeIssueFilter === filter.key ? "check" : undefined}
-                  onClick={() => setActiveIssueFilter(filter.key)}
-                  accessibilityLabel="Select severity issue for filter"
-                >
-                  {filter.label} ({issueFilterCounts[filter.key] || 0})
-                </s-button>
-              ))}
-            </s-menu>
-
-            {/* Product Status Filter */}
-            <s-button commandFor="top-issues-status-menu" variant="secondary">
-              Product Status: {PRODUCT_STATUS_FILTERS.find((f) => f.key === activeProductStatus)?.label}
-            </s-button>
-            <s-menu id="top-issues-status-menu" accessibilityLabel="Product status filter">
-              {PRODUCT_STATUS_FILTERS.map((filter) => (
-                <s-button
-                  key={filter.key}
-                  icon={activeProductStatus === filter.key ? "check" : undefined}
-                  onClick={() => setActiveProductStatus(filter.key)}
-                  accessibilityLabel="Select product status issue for filter"
-                >
-                  {filter.label}
-                </s-button>
-              ))}
-            </s-menu>
-          </s-stack>
-
           {/* Issue List */}
           <s-stack gap="small-300">
             {filteredIssuesNew.map((issue, index, array) => (

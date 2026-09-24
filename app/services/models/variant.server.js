@@ -1,30 +1,38 @@
-export async function upsertVariant({db, item, product}) {
+export async function upsertVariant({db, shopId, item, product}) {
 	const variantTitle = item.variantTitle || "Default Title";
 	const variantId = String(item.variantLegacyResourceId || item.variantId);
 
-  const data = await db.variant.upsert({
-      where: { id: variantId },
-      update: { title: variantTitle },
-      create: {
-        id: variantId,
-        productId: product.id,
-        title: variantTitle,
-      },
-    });
+	const data = await db.variant.upsert({
+			where: {
+				id_shopId: {
+					id: variantId,
+					shopId: shopId
+				}
+			},
+			update: { title: variantTitle },
+			create: {
+				id: variantId,
+				shopId: shopId,
+				productId: product.id,
+				title: variantTitle,
+			},
+		});
 
 	return data;
 }
 
-export async function upsertVariantIssue({db, variant, issue, issueDetails}) {
+export async function upsertVariantIssue({db, shopId, variant, issue, issueDetails}) {
 	const data = await db.variantIssue.upsert({
 		where: {
-			variantId_issueId: {
+			shopId_variantId_issueId: {
+				shopId: shopId,
 				variantId: variant.id,
 				issueId: issue.id,
 			},
 		},
 		update: { details: issueDetails },
 		create: {
+			shopId: shopId,
 			variantId: variant.id,
 			issueId: issue.id,
 			details: issueDetails

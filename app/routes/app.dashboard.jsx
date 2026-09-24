@@ -18,11 +18,11 @@ import styles from "../styles.css?url";
 export const links = () => [{ rel: "stylesheet", href: styles }];
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = await getOrCreateShop({domain: session.shop});
+  const { admin, _session } = await authenticate.admin(request);
+  const shop = await getOrCreateShop({ admin });
   const isNeedsScan = await shouldRunInitialScan(shop);
 
-  if (isNeedsScan) {
+  if (!isNeedsScan) {
     const products = await getProducts(admin);
     const scanResults = scanProducts(products);
     const flattenScanResults = scanResults.flatMap((result) => result.results);
@@ -35,13 +35,12 @@ export const loader = async ({ request }) => {
   }
 
   const monthlyDashboardData = await fetchMonthlyDashboardSnapshot({shopId: shop.id});
-  const test = await getIssueTrends();
-  // const test = topIssuesSnapshot;
+  const issueTrends = await getIssueTrends();
 
   return {
     monthlyDashboardData,
     isUpdating: shop.scanStatus === "IN_PROGRESS",
-    test
+    issueTrends
   };
 };
 
@@ -68,7 +67,7 @@ export default function Dashboard() {
   const {
     monthlyDashboardData,
     isUpdating,
-    test
+    issueTrends
   } = useLoaderData();
 
   return (
@@ -108,14 +107,14 @@ export default function Dashboard() {
         gap="base"
         paddingBlockEnd="base"
       >
-        <TopIssues data={test} />
+        <TopIssues data={issueTrends} />
         <HealthScoreOverTime history={monthlyDashboardData} />
         {/* <HealthByCollection collections={collectionHealth} /> */}
       </s-grid>
 
-      {/* <s-section heading="Test Section">
+      {/* <s-section heading="issueTrends Section">
         <s-paragraph>
-          <pre>{JSON.stringify(test, null, 2)}</pre>
+          <pre>{JSON.stringify(issueTrends, null, 2)}</pre>
         </s-paragraph>
       </s-section> */}
     </s-page>

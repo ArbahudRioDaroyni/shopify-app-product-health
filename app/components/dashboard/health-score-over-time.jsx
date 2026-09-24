@@ -36,7 +36,7 @@ export default function HealthScoreOverTime({ history }) {
 
   return (
     <s-section accessibilityLabel="Health Score Over Time">
-      <s-grid gridTemplateColumns="1fr auto" gap="small-200" alignItems="center">
+      <s-grid gridTemplateColumns="1fr auto" gap="small-200" alignItems="center" paddingBlockEnd="base">
         <s-heading>Health Score Over Time</s-heading>
         <s-button
           commandFor="health-score-date-range-menu"

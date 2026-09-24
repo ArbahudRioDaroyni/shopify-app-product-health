@@ -32,10 +32,8 @@ model Session {
 
 model Shop {
   id            Int        @id @default(autoincrement())
+  shopifyId     String     @unique
   shopifyDomain String     @unique
-  name          String?
-  currency      String?    @default("USD")
-  timezone      String?    @default("UTC")
   isActive      Boolean    @default(true)
   scanStatus    ScanStatus @default(IDLE)
   scanStartedAt DateTime?
@@ -45,9 +43,19 @@ model Shop {
 
   appSettings        AppSetting?
   dashboardSnapshots DashboardSnapshot[]
-  collectionHealths  CollectionHealth[]
+  products           Product[]
+  productIssues      ProductIssue[]
+  productCollections ProductCollection[]
+  productCategories  ProductCategory[]
+  variants           Variant[]
+  variantIssues      VariantIssue[]
   issueTrends        IssueTrend[]
+  collections        Collection[]
+  collectionHealths  CollectionHealth[]
+  scanJobs           ScanJob[]
+  scans              Scan[]
 
+  @@index([shopifyId])
   @@index([shopifyDomain])
 }
 
@@ -70,22 +78,27 @@ model AppSetting {
   maxLowPenalty     Int      @default(10)
   autoReconcileDays Int      @default(7)
   disabledRuleIds   String   @default("[]")
+  autoScanEnabled   Boolean  @default(false)
   updatedAt         DateTime @updatedAt
 }
 
 model Product {
-  id            String              @id
+  id            String
+  shopId        Int
+  shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
   title         String
-  status        InventoryStatus     @default(ACTIVE)
-  featuredImage String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  status        InventoryStatus @default(ACTIVE)
+  featuredImage Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
   variants      Variant[]
   productIssues ProductIssue[]
   collections   ProductCollection[]
   categories    ProductCategory[]
 
-  @@index([status])
+  @@id([id, shopId])
+  @@index([shopId, title])
 }
 
 enum InventoryStatus {
@@ -96,20 +109,25 @@ enum InventoryStatus {
 }
 
 model Variant {
-  id            String         @id
-  productId     String
-  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  title         String
-  sku           String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id        String
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
+  title     String
+  sku       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   variantIssues VariantIssue[]
 
-  @@index([productId])
+  @@id([id, shopId])
 }
 
 model Collection {
-  id        String   @id
+  id        String
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   title     String
   handle    String?
   createdAt DateTime @default(now())
@@ -117,22 +135,26 @@ model Collection {
 
   products ProductCollection[]
   healths  CollectionHealth[]
+
+  @@id([id, shopId])
+  @@index([shopId, title])
 }
 
 model Issue {
-  id            Int            @id @default(autoincrement())
-  slug          String         @unique
-  name          String
-  summary       String
-  description   String
-  category      String
-  severity      Severity       @default(LOW)
-  priority      Priority       @default(improvement)
-  tone          Tone           @default(info)
-  impact        String
-  alert         String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  name        String
+  summary     String
+  description String
+  category    String
+  severity    Severity @default(LOW)
+  priority    Priority @default(improvement)
+  tone        Tone     @default(info)
+  impact      String
+  alert       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   productIssues ProductIssue[]
   variantIssues VariantIssue[]
   issueTrends   IssueTrend[]
@@ -159,31 +181,39 @@ enum Tone {
 }
 
 model ProductIssue {
-  id        String   @id @default(cuid())
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  issueId   Int
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  details   String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  shopId     Int
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product   @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
+  issueId    Int
+  issue      Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details    Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
 
-  @@unique([productId, issueId])
-  @@index([productId])
-  @@index([issueId])
+  @@unique([shopId, productId, issueId])
+  @@index([shopId, productId])
+  @@index([shopId, issueId])
 }
 
 model VariantIssue {
-  id        String   @id @default(cuid())
-  variantId String
-  variant   Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  issueId   Int
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  details   String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  shopId     Int
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  variantId  String
+  variant    Variant   @relation(fields: [variantId, shopId], references: [id, shopId], onDelete: Cascade)
+  issueId    Int
+  issue      Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  details    Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
 
-  @@unique([variantId, issueId])
-  @@index([variantId])
-  @@index([issueId])
+  @@unique([shopId, variantId, issueId])
+  @@index([shopId, variantId])
+  @@index([shopId, issueId])
 }
 
 model IssueTrend {
@@ -238,22 +268,25 @@ model CollectionHealth {
   shopId       Int
   shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   collectionId String
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId, shopId], references: [id, shopId], onDelete: Cascade)
   date         DateTime   @default(now())
   score        Int        @default(100)
   createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@unique([collectionId, date])
+  @@unique([shopId, collectionId, date])
   @@index([shopId, date])
 }
 
 model ProductCollection {
+  shopId       Int
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   productId    String
-  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
   collectionId String
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId, shopId], references: [id, shopId], onDelete: Cascade)
 
-  @@id([productId, collectionId])
+  @@id([shopId, productId, collectionId])
 }
 
 model Category {
@@ -271,10 +304,58 @@ model Category {
 }
 
 model ProductCategory {
+  shopId     Int
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   productId  String
+  product    Product  @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
   categoryId Int
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@id([productId, categoryId])
+  @@id([shopId, productId, categoryId])
+}
+
+model ScanJob {
+  id           String     @id @default(cuid())
+  shopId       Int
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type         ScanType   @default(full)
+  status       ScanStatus @default(IDLE)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  scan Scan?
+
+  @@index([shopId, status, createdAt])
+  @@index([shopId, createdAt])
+}
+
+model Scan {
+  id                     String     @id @default(cuid())
+  shopId                 Int
+  shop                   Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  scanJobId              String?    @unique
+  scanJob                ScanJob?   @relation(fields: [scanJobId], references: [id], onDelete: SetNull)
+  status                 ScanStatus @default(IDLE)
+  type                   ScanType   @default(full)
+  healthScore            Int?
+  totalProducts          Int        @default(0)
+  healthyProducts        Int        @default(0)
+  needsAttentionProducts Int        @default(0)
+  criticalProducts       Int        @default(0)
+  totalIssues            Int        @default(0)
+  highIssues             Int        @default(0)
+  mediumIssues           Int        @default(0)
+  lowIssues              Int        @default(0)
+  errorMessage           String?
+  startedAt              DateTime
+  completedAt            DateTime? // Always normalized to the beginning of the day.
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+  @@index([shopId, completedAt])
 }
