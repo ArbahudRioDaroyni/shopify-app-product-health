@@ -1,101 +1,113 @@
-/**
- * All Issues route (`/app/issues`).
- *
- * Renders the catalog issue table together with three filters: product status,
- * priority, and a search field. Every filter lives in the URL query string
- * (`status`, `priority`, `search`) so the loader can re-query the database and
- * the page stays bookmarkable and shareable.
- *
- * Query string writes are debounced (see `queueParamUpdate`) so several fast
- * filter clicks collapse into a single navigation, and therefore a single
- * loader run.
- */
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, useNavigation, useSearchParams } from "react-router";
+import {
+  useFetcher,
+  useLoaderData,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import { authenticate } from "../shopify.server";
 import { getIssues } from "../services/models/issue.server";
 import { getOrCreateShop } from "../services/models/shop.server";
+import { getProductDetailsById } from "../services/models/product.server";
+import { getVariantDetailsById } from "../services/models/variant.server";
 import { customDebounce, toTitleCase } from "../utils/formatters";
 import styles from "../styles.css?url";
 
-/**
- * Style sheet link descriptor consumed by React Router.
- *
- * @returns {{ rel: string, href: string }[]} Links injected into the document head.
- */
+/** Style sheet link descriptor consumed by React Router. */
 export const links = () => [{ rel: "stylesheet", href: styles }];
 
-/**
- * Selectable product status values.
- *
- * `loader` validates the `status` query param against this list before the value
- * is upper-cased and used in the Prisma query.
- */
+/** Selectable product status values, validated by `loader` before the Prisma query. */
 const PRODUCT_STATUS_FILTERS_NEW = ["all", "active", "draft", "archived"];
 
-/**
- * Selectable issue priority values.
- *
- * `getIssues` maps these UI strings to the Prisma priority enum.
- */
+/** Selectable issue priority values, mapped by `getIssues` to the Prisma priority enum. */
 const PRIORITY_FILTERS = ["all", "improvement", "needs_attention", "critical"];
 
-/**
- * Delay in milliseconds before buffered filter changes are written to the query
- * string and the loader is re-triggered.
- *
- * Lower it for snappier filter feedback, raise it to reduce loader/database calls.
- */
+/** Delay in milliseconds before buffered filter changes reach the URL and re-run the loader. */
 const FILTER_DEBOUNCE_DELAY = 500;
 
-/**
- * Loader for the All Issues page.
- *
- * Reads the `search`, `priority`, and `status` filters from the request URL,
- * resolves the current shop, and returns every issue matching those filters. An
- * unknown `status` value falls back to `all` before it is upper-cased for the
- * database query.
- *
- * @param {{ request: Request }} args React Router loader arguments.
- * @returns {Promise<{
- *   issues: object[],
- *   search: string,
- *   priority: string,
- *   productStatus: string,
- * }>} The matching issues plus the active filter values, so the component can
- *   render its filter controls with the correct label, check icon, and text.
- */
+/** Form intent handled by `action` to resolve product details for a popover. */
+const PRODUCT_DETAILS_INTENT = "product-details";
+
+/** Form intent handled by `action` to resolve variant details for a popover. */
+const VARIANT_DETAILS_INTENT = "variant-details";
+
+export async function action({ request }) {
+  const { admin } = await authenticate.admin(request);
+
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === PRODUCT_DETAILS_INTENT) {
+    /** Legacy product IDs, already de-duplicated on the client. */
+    const productIds = JSON.parse(String(formData.get("productIds") || "[]"));
+
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return { products: [], variants: [] };
+    }
+
+    const products = await Promise.all(
+      productIds.map(async (productId) => {
+        try {
+          return await getProductDetailsById(admin, productId);
+        } catch (error) {
+          console.error(`Failed to fetch product ${productId}:`, error);
+          return null;
+        }
+      }),
+    );
+
+    return { products: products.filter(Boolean), variants: [] };
+  }
+
+  if (intent === VARIANT_DETAILS_INTENT) {
+    /** Legacy variant IDs, already de-duplicated on the client. */
+    const variantIds = JSON.parse(String(formData.get("variantIds") || "[]"));
+
+    if (!Array.isArray(variantIds) || variantIds.length === 0) {
+      return { products: [], variants: [] };
+    }
+
+    const variants = await Promise.all(
+      variantIds.map(async (variantId) => {
+        try {
+          return await getVariantDetailsById(admin, variantId);
+        } catch (error) {
+          console.error(`Failed to fetch variant ${variantId}:`, error);
+          return null;
+        }
+      }),
+    );
+
+    return { products: [], variants: variants.filter(Boolean) };
+  }
+
+  return { products: [], variants: [] };
+}
+
 export async function loader({ request }) {
   const { admin } = await authenticate.admin(request);
 
   /** Parsed request URL, used to read the filter query params. */
   const url = new URL(request.url);
-  /** Free-text search term typed by the user; empty string means no search. */
+  /** Free-text search term; empty string means no search. */
   const search = url.searchParams.get("search") || "";
-  /** Selected issue priority; defaults to `all` when the param is missing. */
+  /** Selected issue priority; defaults to `all`. */
   const priority = url.searchParams.get("priority") || "all";
 
-  /**
-   * Reads and validates the `status` query param.
-   *
-   * @returns {string} The requested product status when it is a known filter,
-   *   otherwise `all`.
-   */
+  /** Reads and validates the `status` query param, falling back to `all`. */
   const getProductStatus = () => {
     const rawProductStatus = url.searchParams.get("status") || "all";
     const isValidStatus = PRODUCT_STATUS_FILTERS_NEW.some(
       (filter) => filter === rawProductStatus.toLowerCase(),
     );
-    const productStatus = isValidStatus ? rawProductStatus : "all";
-    return productStatus;
+    return isValidStatus ? rawProductStatus : "all";
   };
   /** Validated product status filter used by the query. */
   const productStatus = getProductStatus();
 
   /** Shop record the issues belong to. */
   const shop = await getOrCreateShop({ admin });
-  /** Issues matching the current search, priority, and product status filters. */
+  /** Issues matching the current search, priority and product status filters. */
   const issues = await getIssues({
     shopId: shop.id,
     search,
@@ -106,16 +118,7 @@ export async function loader({ request }) {
   return { issues, search, priority, productStatus };
 }
 
-/**
- * All Issues page component.
- *
- * Filter changes are applied in two steps: local state is updated right away so
- * the filter button label, check icon, and search text react instantly, while the
- * query string (and with it the loader) is written by a debounced writer so that
- * rapid clicks or keystrokes only trigger one navigation.
- *
- * @returns {JSX.Element} The issue table page with its filter controls.
- */
+/** Issues page: local state reacts instantly while the URL (and loader) is written debounced. */
 export default function Issues() {
   /** Data returned by `loader`: the issues plus the active filters. */
   const { issues, search, priority, productStatus } = useLoaderData();
@@ -125,41 +128,37 @@ export default function Issues() {
   /** True while the loader for the latest filter change is still running. */
   const isLoading = navigation.state === "loading";
   /** Product status shown as selected; seeded from the loader data. */
-  const [activeStatusFilter, setActiveStatusFilter] = useState(String(productStatus));
+  const [activeStatusFilter, setActiveStatusFilter] = useState(
+    String(productStatus),
+  );
   /** Priority shown as selected; seeded from the loader data. */
-  const [activePriorityFilter, setActivePriorityFilter] = useState(String(priority));
+  const [activePriorityFilter, setActivePriorityFilter] = useState(
+    String(priority),
+  );
   /** Search text displayed in the field; seeded from the loader data. */
   const [activeSearchFilter, setSearchFilter] = useState(String(search));
 
-  /**
-   * Ref holding the most recent query string setter.
-   *
-   * `useSearchParams` returns a new setter every time the query string changes, so
-   * caching one inside `useMemo` would recreate the debouncer (orphaning its
-   * pending timer) and could replay a stale params snapshot. Reading the setter
-   * through a ref keeps the debouncer stable and always up to date.
-   */
+  /** Fetcher that POSTs the `product-details` intent when a product popover opens. */
+  const productFetcher = useFetcher();
+  /** Separate productFetcher for the `variant-details` intent, so both popovers can load at once. */
+  const variantFetcher = useFetcher({ key: VARIANT_DETAILS_INTENT });
+
+  /** Only cache for product details, keyed by legacy product ID; lost on reload. */
+  const [productDetailsById, setProductDetailsById] = useState({});
+
+  /** Only cache for variant details, keyed by legacy variant ID; lost on reload. */
+  const [variantDetailsById, setVariantDetailsById] = useState({});
+
+  /** Holds the newest query string setter, which changes identity on every navigation. */
   const setFilterParamsRef = useRef(setFilterParams);
   useEffect(() => {
     setFilterParamsRef.current = setFilterParams;
   }, [setFilterParams]);
 
-  /**
-   * Buffer of pending query string updates, keyed by param name.
-   *
-   * Keys are merged before flushing, so the last value of each param wins and
-   * updates to different params do not cancel each other.
-   */
+  /** Buffer of pending query string updates, keyed by param name. */
   const pendingParamsRef = useRef({});
 
-  /**
-   * Debounced query string writer shared by all filters.
-   *
-   * Flushes every buffered update in a single navigation (one loader run) while
-   * preserving the params that are not part of the update. The empty dependency
-   * list creates it once per component instance; a pending flush can be aborted
-   * with `debouncedApplyParams.cancel()`.
-   */
+  /** Debounced URL writer created once; merges buffered params into a single navigation. */
   const debouncedApplyParams = useMemo(
     () =>
       customDebounce(() => {
@@ -183,23 +182,45 @@ export default function Issues() {
   /** Cancels a pending flush when the component unmounts. */
   useEffect(() => () => debouncedApplyParams.cancel(), [debouncedApplyParams]);
 
-  /**
-   * Buffers a query string change and schedules a debounced flush.
-   *
-   * @param {string} key Query param name, e.g. `"priority"`.
-   * @param {string} value New value for that param.
-   */
+  /** Merges resolved product details into `productDetailsById`. */
+  useEffect(() => {
+    const products = productFetcher.data?.products;
+    if (!Array.isArray(products) || products.length === 0) return;
+
+    setProductDetailsById((previous) => {
+      const next = { ...previous };
+      products.forEach((product) => {
+        if (product?.legacyResourceId) {
+          next[String(product.legacyResourceId)] = product;
+        }
+      });
+      return next;
+    });
+  }, [productFetcher.data]);
+
+  /** Merges resolved variant details into `variantDetailsById`. */
+  useEffect(() => {
+    const variants = variantFetcher.data?.variants;
+    if (!Array.isArray(variants) || variants.length === 0) return;
+
+    setVariantDetailsById((previous) => {
+      const next = { ...previous };
+      variants.forEach((variant) => {
+        if (variant?.legacyResourceId) {
+          next[String(variant.legacyResourceId)] = variant;
+        }
+      });
+      return next;
+    });
+  }, [variantFetcher.data]);
+
+  /** Buffers a query string change and schedules a debounced flush. */
   const queueParamUpdate = (key, value) => {
     pendingParamsRef.current = { ...pendingParamsRef.current, [key]: value };
     debouncedApplyParams();
   };
 
-  /**
-   * Applies the search term immediately when Enter is pressed, bypassing the
-   * debounce so the user gets an instant result for an explicit submit.
-   *
-   * @param {{ key: string }} e Keydown event from the search field.
-   */
+  /** Applies the search term immediately on Enter, bypassing the debounce. */
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       setFilterParams(
@@ -212,41 +233,77 @@ export default function Issues() {
     }
   };
 
-  /**
-   * Live search: mirrors the typed text into local state and debounces the
-   * `search` query param, so the loader only re-runs once the user pauses typing.
-   *
-   * @param {string} value Text currently in the search field.
-   */
+  /** Live search: updates the field instantly and debounces the `search` param. */
   const handleSearchInput = (value) => {
     setSearchFilter(value);
     queueParamUpdate("search", value);
   };
 
-  /**
-   * Selects a priority filter.
-   *
-   * The selection is reflected in local state immediately for instant feedback,
-   * while the `priority` query param is written by the debounced writer.
-   *
-   * @param {string} value One of `PRIORITY_FILTERS`.
-   */
+  /** Sets the priority filter instantly, then debounces the `priority` param. */
   const handlePriorityFilter = (value) => {
     setActivePriorityFilter(value);
     queueParamUpdate("priority", value);
   };
 
-  /**
-   * Selects a product status filter.
-   *
-   * The selection is reflected in local state immediately for instant feedback,
-   * while the `status` query param is written by the debounced writer.
-   *
-   * @param {string} value One of `PRODUCT_STATUS_FILTERS_NEW`.
-   */
+  /** Sets the status filter instantly, then debounces the `status` param. */
   const handleProductStatusFilter = (value) => {
     setActiveStatusFilter(value);
     queueParamUpdate("status", value);
+  };
+
+  /** Keeps only the IDs that are neither cached nor already returned by a productFetcher. */
+  const getUncachedIds = (ids, cache, inFlight) => [
+    ...new Set(
+      (Array.isArray(ids) ? ids : [ids])
+        .map((id) => String(id))
+        .filter(
+          (id) =>
+            !cache[id] &&
+            !inFlight?.some((item) => String(item.legacyResourceId) === id),
+        ),
+    ),
+  ];
+
+  /** POSTs the `product-details` intent for the product popover; skips cached IDs. */
+  const handleProductPopoverShow = (productIds = []) => {
+		console.log(productDetailsById);
+		
+    const uncachedIds = getUncachedIds(
+      productIds,
+      productDetailsById,
+      productFetcher.data?.products,
+    );
+
+    if (uncachedIds.length === 0) return;
+
+    productFetcher.submit(
+      {
+        intent: PRODUCT_DETAILS_INTENT,
+        productIds: JSON.stringify(uncachedIds),
+      },
+      { method: "post" },
+    );
+  };
+
+  /** POSTs the `variant-details` intent for the variant popover; skips cached IDs. */
+  const handleVariantPopoverShow = (variantIds = []) => {
+		console.log(variantDetailsById);
+
+    const uncachedIds = getUncachedIds(
+      variantIds,
+      variantDetailsById,
+      variantFetcher.data?.variants,
+    );
+
+    if (uncachedIds.length === 0) return;
+
+    variantFetcher.submit(
+      {
+        intent: VARIANT_DETAILS_INTENT,
+        variantIds: JSON.stringify(uncachedIds),
+      },
+      { method: "post" },
+    );
   };
 
   return (
@@ -258,8 +315,7 @@ export default function Issues() {
     >
       <s-query-container containerName="issue-details">
         <s-section padding="none">
-          {/* Issues table: `loading` is driven by the router navigation state, so
-              the table stays mounted while the debounced loader re-runs. */}
+          {/* Table stays mounted while the debounced loader re-runs. */}
           <s-table
             loading={isLoading}
             variant="@container issue-details (inline-size <= 600px) list, table"
@@ -269,8 +325,7 @@ export default function Issues() {
               gap="small-200"
               gridTemplateColumns="auto auto 1fr"
             >
-              {/* Product Status Filter: menu button showing the active status plus
-                  a menu of the selectable statuses. */}
+              {/* Product status filter menu. */}
               <s-button commandFor="product-status-menu" disabled={isLoading}>
                 {`Status: ${toTitleCase(PRODUCT_STATUS_FILTERS_NEW.find((f) => f === activeStatusFilter))}`}
               </s-button>
@@ -289,16 +344,12 @@ export default function Issues() {
                   </s-button>
                 ))}
               </s-menu>
-              {/* Priority Filter: menu button showing the active priority plus a
-                  menu of the selectable priorities. */}
-              <s-button
-                commandFor="top-issues-priority-menu"
-                variant="secondary"
-              >
+              {/* Priority filter menu. */}
+              <s-button commandFor="priority-menu" disabled={isLoading}>
                 {`Priority: ${toTitleCase(PRIORITY_FILTERS.find((f) => f === activePriorityFilter))}`}
               </s-button>
               <s-menu
-                id="top-issues-priority-menu"
+                id="priority-menu"
                 accessibilityLabel="Issue priority filter"
               >
                 {PRIORITY_FILTERS.map((filter) => (
@@ -312,17 +363,17 @@ export default function Issues() {
                   </s-button>
                 ))}
               </s-menu>
-              {/* Search Issue Filter: typing triggers a debounced live search
-                  through `handleSearchInput`, and Enter applies it immediately. */}
+              {/* Live search on typing, immediate on Enter. */}
               <s-search-field
                 label="Search Issue"
                 labelAccessibilityVisibility="exclusive"
                 placeholder="Search Issue"
                 onInput={(e) => handleSearchInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                disabled={isLoading}
               ></s-search-field>
             </s-grid>
-            {/* Column headers: issue, affected products, affected variants, priority. */}
+            {/* Issue, affected products, affected variants, priority. */}
             <s-table-header-row>
               <s-table-header listSlot="primary">Issue</s-table-header>
               <s-table-header listSlot="inline">Products</s-table-header>
@@ -333,8 +384,7 @@ export default function Issues() {
               {issues.length > 0 ? (
                 issues.map((issue) => (
                   <s-table-row key={issue.id}>
-                    {/* Issue name; the tooltip (opened on hover/focus of the
-                        interested elements) shows the rule description. */}
+                    {/* Rule description shown by the tooltip on hover/focus. */}
                     <s-table-cell>
                       <s-tooltip id={`description-${issue.id}`}>
                         {issue.description}
@@ -367,7 +417,7 @@ export default function Issues() {
                       <s-clickable-chip
                         color="subdued"
                         accessibilityLabel={`${issue.productsCount} Affected Product`}
-                        commandFor={"products-" + issue.id}
+                        commandFor={"affected-products-" + issue.id}
                       >
                         <s-icon
                           size="small"
@@ -375,9 +425,88 @@ export default function Issues() {
                           type="product"
                         ></s-icon>
                         {issue.productsCount} Affected Product
+                        {issue.productsCount > 1 ? "s" : ""}
                       </s-clickable-chip>
+                      {/* Product details come from `action` on show, then stay cached. */}
+                      <s-popover
+                        id={"affected-products-" + issue.id}
+                        onShow={() =>
+                          handleProductPopoverShow(issue.productIds.slice(0, 3))
+                        }
+                      >
+                        <s-box padding="base">
+                          <s-stack gap="small">
+                            <s-stack gap="small-200">
+                              {(issue.productIds || [])
+                                .slice(0, 3)
+                                .map((productId) => {
+                                  const _isPending = productFetcher.state !== "idle";
+                                  const product =
+                                    productDetailsById[String(productId)];
+
+                                  return (
+                                    <s-clickable
+                                      key={"affected-products" + productId}
+                                      paddingBlock="small-500"
+                                      paddingInlineEnd="small"
+                                      background={
+                                        !product ? "subdued" : "transparent"
+                                      }
+                                      borderRadius="base"
+                                      accessibilityVisibility="hidden"
+                                      minInlineSize="224px"
+                                      minBlockSize="18px"
+                                      disabled={!product}
+                                    >
+                                      {!product ? null : (
+                                        <>
+                                          <s-stack
+                                            direction="inline"
+                                            alignItems="center"
+                                            gap="small-200"
+                                          >
+                                            <s-thumbnail
+                                              src={
+                                                product?.featuredMedia?.preview
+                                                  ?.image?.url || undefined
+                                              }
+                                              alt={
+                                                product?.featuredMedia?.preview
+                                                  ?.image?.altText ||
+                                                "Product image"
+                                              }
+                                              size="small"
+                                            />
+                                            <s-box inlineSize="300px">
+                                              <s-paragraph lineClamp={2}>
+                                                {product?.title}
+                                              </s-paragraph>
+                                            </s-box>
+                                            <s-badge
+                                              tone={
+                                                product?.status === "ACTIVE"
+                                                  ? "success"
+                                                  : "neutral"
+                                              }
+                                            >
+                                              {toTitleCase(product?.status)}
+                                            </s-badge>
+                                          </s-stack>
+                                        </>
+                                      )}
+                                    </s-clickable>
+                                  );
+                                })}
+                            </s-stack>
+                            <s-divider />
+                            <s-button variant="secondary">
+                              View issue details
+                            </s-button>
+                          </s-stack>
+                        </s-box>
+                      </s-popover>
                     </s-table-cell>
-                    {/* Affected variants; a dash when the rule only targets products. */}
+                    {/* Dash when the rule only targets products. */}
                     <s-table-cell>
                       {issue.variantsCount > 0 ? (
                         <s-clickable-chip
@@ -390,13 +519,80 @@ export default function Issues() {
                             slot="graphic"
                             type="variant"
                           ></s-icon>
-                          {issue.variantsCount} Affected Variants
+                          {issue.variantsCount} Affected Variant
+                          {issue.variantsCount > 1 ? "s" : ""}
                         </s-clickable-chip>
                       ) : (
                         <s-text>-</s-text>
                       )}
+                      {/* Variant details come from `action` on show, then stay cached. */}
+                      <s-popover
+                        id={"variants-" + issue.id}
+                        onShow={() =>
+                          handleVariantPopoverShow(issue.variantIds.slice(0, 3))
+                        }
+                      >
+                        <s-box padding="base">
+                          <s-stack gap="small">
+                            <s-stack gap="small-200">
+                              {(issue.variantIds || [])
+                                .slice(0, 3)
+                                .map((variantId) => {
+                                  const variant =
+                                    variantDetailsById[String(variantId)];
+
+                                  return (
+                                    <s-clickable
+                                      key={"affected-variants" + variantId}
+                                      paddingBlock="small-500"
+                                      paddingInlineEnd="small"
+                                      background={
+                                        !variant ? "subdued" : "transparent"
+                                      }
+                                      borderRadius="base"
+                                      accessibilityVisibility="hidden"
+                                      minInlineSize="224px"
+                                      minBlockSize="18px"
+                                      disabled={!variant}
+                                    >
+                                      {!variant ? null : (
+                                        <>
+                                          <s-stack
+                                            direction="inline"
+                                            alignItems="center"
+                                            gap="small-200"
+                                          >
+                                            <s-thumbnail
+                                              src={variant?.image?.url || undefined}
+                                              alt={
+                                                variant?.image?.altText ||
+                                                variant?.title ||
+                                                "Variant image"
+                                              }
+                                              size="small"
+                                            />
+                                            <s-box inlineSize="300px">
+                                              <s-paragraph lineClamp={2}>
+                                                {variant?.title} —{" "}
+                                                {variant?.product?.title}
+                                              </s-paragraph>
+                                            </s-box>
+                                          </s-stack>
+                                        </>
+                                      )}
+                                    </s-clickable>
+                                  );
+                                })}
+                            </s-stack>
+                            <s-divider />
+                            <s-button variant="secondary">
+                              View issue details
+                            </s-button>
+                          </s-stack>
+                        </s-box>
+                      </s-popover>
                     </s-table-cell>
-                    {/* Severity badge, e.g. "Critical" or "Needs Attention". */}
+                    {/* Severity badge. */}
                     <s-table-cell>
                       <s-badge tone={issue.tone}>
                         {toTitleCase(issue.priority)}
@@ -405,7 +601,7 @@ export default function Issues() {
                   </s-table-row>
                 ))
               ) : (
-                /* Empty state: shown when no issue matches the active filters. */
+                /* Shown when no issue matches the active filters. */
                 <s-table-row>
                   <s-table-cell>{`No affected issue found.`}</s-table-cell>
                 </s-table-row>
@@ -414,11 +610,11 @@ export default function Issues() {
           </s-table>
         </s-section>
       </s-query-container>
-      {/* <s-section heading="issue">
+      <s-section heading="issue">
         <s-paragraph>
           <pre>{JSON.stringify(issues, null, 2)}</pre>
         </s-paragraph>
-      </s-section> */}
+      </s-section>
     </s-page>
   );
 }
