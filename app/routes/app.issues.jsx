@@ -8,8 +8,8 @@ import {
 import { authenticate } from "../shopify.server";
 import { getIssues } from "../services/models/issue.server";
 import { getOrCreateShop } from "../services/models/shop.server";
-import { getProductDetailsById } from "../services/models/product.server";
-import { getVariantDetailsById } from "../services/models/variant.server";
+import { getProductsDetailsByIds } from "../services/models/product.server";
+import { getVariantsDetailsByIds } from "../services/models/variant.server";
 import { customDebounce, toTitleCase } from "../utils/formatters";
 import styles from "../styles.css?url";
 
@@ -45,18 +45,10 @@ export async function action({ request }) {
       return { products: [], variants: [] };
     }
 
-    const products = await Promise.all(
-      productIds.map(async (productId) => {
-        try {
-          return await getProductDetailsById(admin, productId);
-        } catch (error) {
-          console.error(`Failed to fetch product ${productId}:`, error);
-          return null;
-        }
-      }),
-    );
+    /** One bulk request for every ID instead of one request per ID. */
+    const products = await getProductsDetailsByIds({ admin, productIds });
 
-    return { products: products.filter(Boolean), variants: [] };
+    return { products, variants: [] };
   }
 
   if (intent === VARIANT_DETAILS_INTENT) {
@@ -67,18 +59,10 @@ export async function action({ request }) {
       return { products: [], variants: [] };
     }
 
-    const variants = await Promise.all(
-      variantIds.map(async (variantId) => {
-        try {
-          return await getVariantDetailsById(admin, variantId);
-        } catch (error) {
-          console.error(`Failed to fetch variant ${variantId}:`, error);
-          return null;
-        }
-      }),
-    );
+    /** One bulk request for every ID instead of one request per ID. */
+    const variants = await getVariantsDetailsByIds({ admin, variantIds });
 
-    return { products: [], variants: variants.filter(Boolean) };
+    return { products: [], variants };
   }
 
   return { products: [], variants: [] };
@@ -140,7 +124,7 @@ export default function Issues() {
 
   /** Fetcher that POSTs the `product-details` intent when a product popover opens. */
   const productFetcher = useFetcher();
-  /** Separate productFetcher for the `variant-details` intent, so both popovers can load at once. */
+  /** Separate fetcher for the `variant-details` intent, so both popovers can load at once. */
   const variantFetcher = useFetcher({ key: VARIANT_DETAILS_INTENT });
 
   /** Only cache for product details, keyed by legacy product ID; lost on reload. */
@@ -288,7 +272,7 @@ export default function Issues() {
   /** POSTs the `variant-details` intent for the variant popover; skips cached IDs. */
   const handleVariantPopoverShow = (variantIds = []) => {
 		console.log(variantDetailsById);
-
+		
     const uncachedIds = getUncachedIds(
       variantIds,
       variantDetailsById,
