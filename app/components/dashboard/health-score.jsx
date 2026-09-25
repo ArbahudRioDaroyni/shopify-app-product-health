@@ -1,13 +1,22 @@
 import { DonutChart } from "../chart";
 
-export default function HealthScore({ data }) {
-  const score = data.healthScore;
-  const totalIssues = data.totalIssues;
-  const totalCriticalIssues = data.highIssues;
+export default function HealthScore({ data = null }) {
+  if (!data) {
+    return (
+      <s-grid gap="base">
+        <s-heading>Health Score</s-heading>
+        <s-text color="subdued">No data available</s-text>
+      </s-grid>
+    );
+  }
+
+  const score = data.healthScore ?? 0;
+  const totalIssues = data.totalIssues ?? 0;
+  const totalCriticalIssues = data.highIssues ?? 0;
   const productHealthList = [
-    data.healthyProducts,
-    data.needsAttentionProducts,
-    data.criticalProducts
+    data.healthyProducts ?? 0,
+    data.needsAttentionProducts ?? 0,
+    data.criticalProducts ?? 0
   ];
 
   const tone = score >= 80 ? "success" : score >= 60 ? "warning" : "critical";
@@ -28,8 +37,9 @@ export default function HealthScore({ data }) {
         <DonutChart data={productHealthList} />
       </s-grid>
       <s-stack direction="inline" gap="small-200">
-        <s-badge tone="auto">{totalIssues} issues</s-badge>
-        <s-text>{totalCriticalIssues} critical</s-text>
+        <s-badge tone="neutral">{totalIssues} issues</s-badge>
+        <s-divider direction="block"></s-divider>
+        <s-badge tone="critical">{totalCriticalIssues} critical issues</s-badge>
       </s-stack>
     </s-grid>
   );
@@ -41,7 +51,6 @@ HealthScore.propTypes = {
     if (value !== null && value !== undefined && typeof value !== "object") {
       return new Error(`${componentName}: data must be an object or null`);
     }
-
     return null;
   },
 };

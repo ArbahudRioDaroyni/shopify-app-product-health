@@ -58,3 +58,19 @@ export function getInitials(str) {
     .map((word) => word.charAt(0).toUpperCase())
     .join("");
 }
+
+// Tulis fungsi pembantu ini di bagian paling atas file (di luar fungsi komponen IssueDetail)
+export function customDebounce(func, delay) {
+  let timeoutId;
+  const debounced = (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+  debounced.cancel = () => clearTimeout(timeoutId);
+  return debounced;
+}
+
+// const debouncedSetSearch = useMemo(
+//   () => customDebounce((value) => { ... LOGIKA TETAP SAMA ... }, 500),
+//   [setSearchParams]
+// );

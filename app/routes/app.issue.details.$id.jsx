@@ -13,7 +13,7 @@ export async function loader({ request, params }) {
   const id = params.id;
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
-  const pageSize = 4;
+  const pageSize = 10;
   const issue = await getIssueDetailsById({ id, page, pageSize });
   const test = await getVariantById(admin, String(44211883900964));
 

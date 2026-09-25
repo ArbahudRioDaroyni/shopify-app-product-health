@@ -6,11 +6,23 @@ const HEALTH_SCORE_FILTERS = [
   { days: 30, label: "Last 30 days" },
 ];
 
-export default function HealthScoreOverTime({ history }) {
+export default function HealthScoreOverTime({ history = [] }) {
   const [dateRange, setDateRange] = useState(7);
 
-  let combinedTrend;
-  if (history.length > 0 && history.length < dateRange) {
+  let combinedTrend = [];
+
+  if (history.length === 0) {
+    const baseDate = new Date();
+    combinedTrend = Array(dateRange).fill(null).map((_, index) => {
+      const dayOffset = dateRange - 1 - index;
+      const cloneDate = new Date(baseDate);
+      cloneDate.setDate(cloneDate.getDate() - dayOffset);
+      return {
+        healthScore: 0,
+        createdAt: cloneDate.toISOString()
+      };
+    });
+  } else if (history.length > 0 && history.length < dateRange) {
     const missingCount = dateRange - history.length;
     const baseDate = new Date(history[0].createdAt);
 
@@ -27,9 +39,11 @@ export default function HealthScoreOverTime({ history }) {
     });
 
     combinedTrend = [...padding, ...history];
+  } else {
+    combinedTrend = history;
   }
 
-  const data = combinedTrend.map(({ healthScore: count, createdAt: date }) => ({
+  const data = (combinedTrend || []).map(({ healthScore: count, createdAt: date }) => ({
     count,
     date
   }));
@@ -62,7 +76,12 @@ export default function HealthScoreOverTime({ history }) {
           ))}
         </s-menu>
       </s-grid>
-      <LineChart range={dateRange} data={data} title="Health Score" />
+      
+      {history.length === 0 ? (
+        <s-text color="subdued">No data available.</s-text>
+      ) : (
+        <LineChart range={dateRange} data={data} title="Health Score" />
+      )}
     </s-section>
   );
 }
@@ -72,7 +91,6 @@ HealthScoreOverTime.propTypes = {
     if (!Array.isArray(props[propName])) {
       return new Error(`${componentName}: history must be an array`);
     }
-
     return null;
   },
 };

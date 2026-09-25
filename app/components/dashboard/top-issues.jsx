@@ -22,9 +22,10 @@ export default function TopIssues({ data = [] }) {
   const [activeProductStatus, setActiveProductStatus] = useState("all");
 
   const filteredIssuesNew = useMemo(() => {
-    const processed = data
+    const processed = (data || [])
       .map((issue) => {
-        const filteredResultsByProductStatus = issue.latest.filter(
+        const latestIssues = issue?.latest || [];
+        const filteredResultsByProductStatus = latestIssues.filter(
           (latest) => activeProductStatus === "all" || latest.status === activeProductStatus
         );
 
@@ -56,9 +57,10 @@ export default function TopIssues({ data = [] }) {
   }, [data, activeIssueFilter, activeProductStatus]);
 
   const issueFilterCounts = useMemo(() => {
-    return data.reduce(
+    return (data || []).reduce(
       (acc, issue) => {
-        const hasMatchingStatus = issue.latest.some(
+        const latestIssues = issue?.latest || [];
+        const hasMatchingStatus = latestIssues.some(
           (latest) => activeProductStatus === "all" || latest.productStatus === activeProductStatus
         );
         if (hasMatchingStatus) {
@@ -70,6 +72,8 @@ export default function TopIssues({ data = [] }) {
       { all: 0, critical: 0, warning: 0, info: 0 }
     );
   }, [data, activeProductStatus]);
+
+  const hasNoIssues = filteredIssuesNew.length === 0;
 
   return (
     <s-section accessibilityLabel="Top Issues">
@@ -113,38 +117,41 @@ export default function TopIssues({ data = [] }) {
           </s-menu>
         </s-stack>
       </s-grid>
-      <s-grid gridTemplateColumns="1fr auto" gap="small-200" alignItems="center">
+      
+      <s-grid gridTemplateColumns="1fr" gap="small-200" alignItems="center">
         <s-grid gap="large-100">
-          {/* Issue List */}
-          <s-stack gap="small-300">
-            {filteredIssuesNew.map((issue, index, array) => (
-              <s-stack gap="small-300" key={issue.id}>
-                <s-clickable accessibilityLabel={issue.name} href={`/app/issue/details/${issue.id}`}>
-                  <s-tooltip id={`tooltip-${issue.id}`}>{issue.description}</s-tooltip>
-                  <s-grid
-                    gridTemplateColumns="auto 1fr auto 32px auto"
-                    gap="small"
-                    alignItems="center"
-                    paddingBlock="small-300"
-                  >
-                    <s-box padding="small-500" background="transparent" border="base" borderColor="strong" borderRadius="base">
-                      <s-icon type="alert-circle" tone={issue.tone} interestFor={`tooltip-${issue.id}`} />
-                    </s-box>
-                    <s-stack gap="small-500">
-                      <s-heading>{issue.name}</s-heading>
-                    </s-stack>
-                    {/* Warna chart dikirim berdasarkan issue.tone asli */}
-                    <TrendsChart data={issue.trendAll} tone={issue.tone} />
-                    <s-heading>{issue.countAll}</s-heading>
-                    <s-icon type="caret-right" accessibilityLabel="See products" />
-                  </s-grid>
-                </s-clickable>
-                {index !== array.length - 1 && <s-divider />}
-              </s-stack>
-            ))}
-          </s-stack>
+          {hasNoIssues ? (
+            <s-text tone="success">Hurray! No catalog issues detected.</s-text>
+          ) : (
+            <s-stack gap="small-300">
+              {filteredIssuesNew.map((issue, index, array) => (
+                <s-stack gap="small-300" key={issue.id}>
+                  <s-clickable accessibilityLabel={issue.name} href={`/app/issue/details/${issue.id}`}>
+                    <s-tooltip id={`tooltip-${issue.id}`}>{issue.description}</s-tooltip>
+                    <s-grid
+                      gridTemplateColumns="auto 1fr auto 32px auto"
+                      gap="small"
+                      alignItems="center"
+                      paddingBlock="small-300"
+                    >
+                      <s-box padding="small-500" background="transparent" border="base" borderColor="strong" borderRadius="base">
+                        <s-icon type="alert-circle" tone={issue.tone} interestFor={`tooltip-${issue.id}`} />
+                      </s-box>
+                      <s-stack gap="small-500">
+                        <s-heading>{issue.name}</s-heading>
+                      </s-stack>
+                      <TrendsChart data={issue.trendAll || []} tone={issue.tone} />
+                      <s-heading>{issue.countAll || 0}</s-heading>
+                      <s-icon type="caret-right" accessibilityLabel="See products" />
+                    </s-grid>
+                  </s-clickable>
+                  {index !== array.length - 1 && <s-divider />}
+                </s-stack>
+              ))}
+            </s-stack>
+          )}
 
-          <s-link href="#beep">View all issues</s-link>
+          {!hasNoIssues && <s-link href="#beep">View all issues</s-link>}
         </s-grid>
       </s-grid>
     </s-section>
@@ -156,7 +163,6 @@ TopIssues.propTypes = {
     if (!Array.isArray(props[propName])) {
       return new Error(`${componentName}: data must be an array`);
     }
-
     return null;
   }
 };

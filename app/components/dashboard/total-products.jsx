@@ -1,4 +1,13 @@
 export default function TotalProducts({ total, healthy, warning, critical }) {
+  if (!total) {
+    return (
+      <s-grid gap="base">
+        <s-heading>Total Products</s-heading>
+        <s-text color="subdued">No data available</s-text>
+      </s-grid>
+    );
+  }
+
   const percentage = (value) => total
     ? Math.round((value / total) * 100)
     : 0;

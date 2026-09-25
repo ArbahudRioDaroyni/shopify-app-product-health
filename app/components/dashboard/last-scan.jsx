@@ -2,9 +2,12 @@ import { useEffect } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 
 function formatLastScanTime(lastScanAt) {
-  if (!lastScanAt) return "No completed scan yet";
+  if (!lastScanAt || lastScanAt === "null") return "No completed scan yet";
 
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(lastScanAt).getTime()) / 1000));
+  const scanDate = new Date(lastScanAt);
+  if (isNaN(scanDate.getTime())) return "No completed scan yet";
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - scanDate.getTime()) / 1000));
   if (elapsedSeconds < 60) return "Just now";
 
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
@@ -32,6 +35,8 @@ export default function LastScan({ lastScanAt, isUpdating }) {
     return () => clearInterval(interval);
   }, [isUpdating, revalidator]);
 
+  const hasNeverScanned = !lastScanAt || lastScanAt === "null";
+
   return (
     <s-stack gap="base">
       <s-heading>Last scan</s-heading>
@@ -40,10 +45,18 @@ export default function LastScan({ lastScanAt, isUpdating }) {
           <p className="health-summary__main-text">
             {isUpdating ? "Scan in progress..." : formatLastScanTime(lastScanAt)}
           </p>
-          <s-icon type={isUpdating ? "refresh" : "check-circle"} tone={isUpdating ? "info" : "success"}></s-icon>
+          <s-icon 
+            type={isUpdating ? "refresh" : hasNeverScanned ? "alert-circle" : "check-circle"} 
+            tone={isUpdating ? "info" : hasNeverScanned ? "warning" : "success"}
+          ></s-icon>
         </s-stack>
         <s-text>
-          {isUpdating ? "Dashboard will refresh when it completes." : "Catalog is up to date."}
+          {isUpdating 
+            ? "Dashboard will refresh when it completes." 
+            : hasNeverScanned 
+              ? "Please run a scan to analyze your catalog health." // Pesan jika database kosong
+              : "Catalog is up to date."
+          }
         </s-text>
       </s-stack>
       <s-button
@@ -63,14 +76,12 @@ LastScan.propTypes = {
     if (value !== null && value !== undefined && typeof value !== "string") {
       return new Error(`${componentName}: lastScanAt must be a date string or null`);
     }
-
     return null;
   },
   isUpdating: (props, propName, componentName) => {
     if (typeof props[propName] !== "boolean") {
       return new Error(`${componentName}: isUpdating must be a boolean`);
     }
-
     return null;
   },
 };

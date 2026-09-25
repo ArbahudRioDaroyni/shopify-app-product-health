@@ -2,7 +2,7 @@ import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getProducts } from "../services/shopify/products.server";
 import { scanProducts } from "../services/scanner/product-scanner.server";
-import { getOrCreateShop, shouldRunInitialScan } from "../services/models/shop.server";
+import { getOrCreateShop } from "../services/models/shop.server";
 import { fetchMonthlyDashboardSnapshot } from "../services/models/dashboard.server";
 import { getIssueTrends } from "../services/models/issue.server";
 import { saveBulkCatalogScan } from "../services/core/store.server";
@@ -18,24 +18,24 @@ import styles from "../styles.css?url";
 export const links = () => [{ rel: "stylesheet", href: styles }];
 
 export const loader = async ({ request }) => {
-  const { admin, _session } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const shop = await getOrCreateShop({ admin });
-  const isNeedsScan = await shouldRunInitialScan(shop);
+  // const isNeedsScan = await shouldRunInitialScan(shop);
 
-  if (!isNeedsScan) {
-    const products = await getProducts(admin);
-    const scanResults = scanProducts(products);
-    const flattenScanResults = scanResults.flatMap((result) => result.results);
+  // if (!isNeedsScan) {
+  //   const products = await getProducts(admin);
+  //   const scanResults = scanProducts(products);
+  //   const flattenScanResults = scanResults.flatMap((result) => result.results);
 
-    await saveBulkCatalogScan({
-      shopId: shop.id,
-      scanResults: flattenScanResults,
-      scanType: "full",
-    });
-  }
+  //   await saveBulkCatalogScan({
+  //     shopId: shop.id,
+  //     scanResults: flattenScanResults,
+  //     scanType: "full",
+  //   });
+  // }
 
-  const monthlyDashboardData = await fetchMonthlyDashboardSnapshot({shopId: shop.id});
-  const issueTrends = await getIssueTrends();
+  const monthlyDashboardData = (await fetchMonthlyDashboardSnapshot({ shopId: shop.id })) || [];
+  const issueTrends = (await getIssueTrends()) || [];
 
   return {
     monthlyDashboardData,
@@ -48,7 +48,7 @@ export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   console.log(admin, session);
   
-  const shop = await getOrCreateShop({domain: session.shop});
+  const shop = await getOrCreateShop({ admin });
 
   const products = await getProducts(admin);
   const scanResults = scanProducts(products);
@@ -65,10 +65,13 @@ export const action = async ({ request }) => {
 
 export default function Dashboard() {
   const {
-    monthlyDashboardData,
+    monthlyDashboardData = [],
     isUpdating,
-    issueTrends
+    issueTrends = []
   } = useLoaderData();
+
+  const latestDashboardSnapshot = monthlyDashboardData.length > 0 ? monthlyDashboardData.at(-1) : null;
+  const hasNoData = !latestDashboardSnapshot;
 
   return (
     <s-page heading="Dashboard" inlineSize="large" className="app-catalog-health">
@@ -79,23 +82,33 @@ export default function Dashboard() {
         <s-banner tone="info">Catalog scan is updating in the background.</s-banner>
       )}
 
+      {hasNoData && !isUpdating && (
+        <s-banner tone="warning" heading="No data available">
+          We haven`t found any catalog scan data yet. Please trigger a manual scan or wait for the initial setup to complete.
+        </s-banner>
+      )}
+
       <s-section padding="base" className="dashboard-summary">
         <s-query-container containerName="dashboard-summary">
           <s-grid
             gridTemplateColumns="@container dashboard-summary (inline-size <= 600px) 1fr, 1fr auto 1fr auto 1fr"
             gap="small"
           >
-            <HealthScore data={monthlyDashboardData.at(-1)} />
+            <HealthScore data={latestDashboardSnapshot} />
+            
             <s-divider direction="@container (inline-size <= 600px) inline, block" />
+            
             <TotalProducts
-              total={monthlyDashboardData.at(-1).totalProducts}
-              healthy={monthlyDashboardData.at(-1).healthyProducts}
-              warning={monthlyDashboardData.at(-1).needsAttentionProducts}
-              critical={monthlyDashboardData.at(-1).criticalProducts}
+              total={latestDashboardSnapshot?.totalProducts ?? 0}
+              healthy={latestDashboardSnapshot?.healthyProducts ?? 0}
+              warning={latestDashboardSnapshot?.needsAttentionProducts ?? 0}
+              critical={latestDashboardSnapshot?.criticalProducts ?? 0}
             />
+            
             <s-divider direction="@container (inline-size <= 600px) inline, block" />
+            
             <LastScan
-              lastScanAt={monthlyDashboardData.at(-1)?.createdAt?.toISOString() || null}
+              lastScanAt={latestDashboardSnapshot?.createdAt ? new Date(latestDashboardSnapshot.createdAt).toISOString() : null}
               isUpdating={isUpdating}
             />
           </s-grid>
@@ -112,11 +125,11 @@ export default function Dashboard() {
         {/* <HealthByCollection collections={collectionHealth} /> */}
       </s-grid>
 
-      {/* <s-section heading="issueTrends Section">
+      <s-section heading="latestDashboardSnapshot Section">
         <s-paragraph>
-          <pre>{JSON.stringify(issueTrends, null, 2)}</pre>
+          <pre>{JSON.stringify(latestDashboardSnapshot, null, 2)}</pre>
         </s-paragraph>
-      </s-section> */}
+      </s-section>
     </s-page>
   );
 }
