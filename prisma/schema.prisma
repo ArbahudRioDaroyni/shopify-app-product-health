@@ -71,7 +71,7 @@ model AppSetting {
   shopId            Int      @unique
   shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   highPenalty       Int      @default(15)
-  mediumPenalty     Int      @default(5)
+  mediumPenalty     Int      @default(6)
   lowPenalty        Int      @default(2)
   maxHighPenalty    Int      @default(60)
   maxMediumPenalty  Int      @default(30)
@@ -86,9 +86,9 @@ model Product {
   id            String
   shopId        Int
   shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  title         String
-  status        InventoryStatus @default(ACTIVE)
-  featuredImage Json?
+  title         String // deprecated: will remove, dont use!
+  status        InventoryStatus @default(ACTIVE)  // deprecated: will remove, dont use!
+  featuredImage Json?  // deprecated: will remove, dont use!
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -114,8 +114,8 @@ model Variant {
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
-  title     String
-  sku       String?
+  title     String  // deprecated: will remove, dont use!
+  sku       String?  // deprecated: will remove, dont use!
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -128,8 +128,8 @@ model Collection {
   id        String
   shopId    Int
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  title     String
-  handle    String?
+  title     String // deprecated: will remove, dont use!
+  handle    String? // deprecated: will remove, dont use!
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

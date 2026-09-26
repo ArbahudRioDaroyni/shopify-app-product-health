@@ -1,3 +1,5 @@
+import db from "../../db.server.js";
+
 export const GET_PRODUCTS_BY_IDS_QUERY = `#graphql
   query GetProductsDetailsByIds($ids: [ID!]!) {
     nodes(ids: $ids) {
@@ -19,6 +21,21 @@ export const GET_PRODUCTS_BY_IDS_QUERY = `#graphql
             }
           }
           status
+        }
+
+        collections(first: 100) {
+          nodes {
+            id
+            title
+          }
+        }
+
+        variants(first: 100) {
+          nodes {
+            id
+            legacyResourceId
+            sku
+          }
         }
       }
     }
@@ -64,6 +81,93 @@ export async function getProductsDetailsByIds({ admin, productIds = [] } = {}) {
   const products = (data.data?.nodes || []).filter(Boolean);
 
   return products;
+}
+
+/**
+ * Retrieves a paginated list of stored products for a shop together with their
+ * unique issue count. The issue count combines the issues attached directly to
+ * the product with the issues attached to any of its variants, de-duplicated so
+ * the same issue (e.g. a duplicate image rule hitting 2 variants) counts once.
+ *
+ * Only non-deprecated columns are returned (`id`, `createdAt`); titles, SKUs,
+ * images and collections are resolved from Shopify by the caller.
+ *
+ * @param {object} options - Options object
+ * @param {number} options.shopId - Internal shop ID owning the products
+ * @param {number} [options.page=1] - One-based page number
+ * @param {number} [options.pageSize=10] - Number of products per page
+ * @returns {Promise<{data: Array<object>, count: number, page: number, pageSize: number, totalPages: number}>}
+ */
+export async function getAllProduct({ shopId, page = 1, pageSize = 10 } = {}) {
+  const safePage = Math.max(parseInt(page, 10) || 1, 1);
+  const safePageSize = Math.max(parseInt(pageSize, 10) || 10, 1);
+  const skip = (safePage - 1) * safePageSize;
+
+  const where = { shopId };
+
+  const [products, count] = await Promise.all([
+    db.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: safePageSize,
+      select: {
+        id: true,
+        shopId: true,
+        createdAt: true,
+        productIssues: {
+          select: {
+            issueId: true,
+          },
+        },
+        variants: {
+          select: {
+            id: true,
+            variantIssues: {
+              select: {
+                issueId: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    db.product.count({ where }),
+  ]);
+
+  const data = products.map((product) => {
+    /** Unique issue IDs found both on the product itself and on its variants. */
+    const issueIds = new Set();
+
+    (product.productIssues || []).forEach((productIssue) => {
+      if (productIssue.issueId !== null && productIssue.issueId !== undefined) {
+        issueIds.add(productIssue.issueId);
+      }
+    });
+
+    (product.variants || []).forEach((variant) => {
+      (variant.variantIssues || []).forEach((variantIssue) => {
+        if (variantIssue.issueId !== null && variantIssue.issueId !== undefined) {
+          issueIds.add(variantIssue.issueId);
+        }
+      });
+    });
+
+    return {
+      id: product.id,
+      shopId: product.shopId,
+      createdAt: product.createdAt,
+      issueCount: issueIds.size,
+    };
+  });
+
+  return {
+    data,
+    count,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages: Math.max(Math.ceil(count / safePageSize), 1),
+  };
 }
 
 export const GET_PRODUCT_BY_ID_QUERY = `#graphql

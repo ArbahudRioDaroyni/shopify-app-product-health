@@ -5,15 +5,23 @@ export const GET_VARIANTS_BY_IDS_QUERY = `#graphql
         id
         legacyResourceId
         title
-        sku
-        price
-        compareAtPrice
-        inventoryQuantity
-        image {
-          id
-          altText
-          url(transform: { maxWidth: 40, maxHeight: 40 })
-        }
+
+				media(first: 1) {
+					nodes {
+						id
+						alt
+						mediaContentType
+						preview {
+							image {
+								id
+								altText
+								url(transform: { maxWidth: 40, maxHeight: 40 })
+							}
+						}
+						status
+					}
+				}
+
         product {
           id
           legacyResourceId
@@ -77,11 +85,23 @@ export const GET_VARIANT_DETAILS_BY_ID_QUERY = `#graphql
       price
       compareAtPrice
       inventoryQuantity
-      image {
-        id
-        altText
-        url(transform: { maxWidth: 40, maxHeight: 40 })
-      }
+      
+			media(first: 1) {
+				nodes {
+					id
+					alt
+					mediaContentType
+					preview {
+						image {
+							id
+							altText
+							url(transform: { maxWidth: 40, maxHeight: 40 })
+						}
+					}
+					status
+				}
+			}
+
       product {
         id
         legacyResourceId

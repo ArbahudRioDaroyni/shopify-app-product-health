@@ -49,10 +49,18 @@ export async function getIssues({ shopId, search, priority, productStatus }) {
     issueWhere.priority = priorityMap[priority] || undefined;
   }
 
-  // 2. Construct the filter condition for Product Status (ACTIVE, DRAFT, ARCHIVED)
-  const productStatusCondition = productStatus && productStatus !== "ALL"
-    ? { status: productStatus } 
-    : {};
+  let productStatusCondition;
+  // Adjust the mapping from UI strings to Prisma InventoryStatus Enums
+  if (productStatus) {
+    const safeStatus = productStatus.toUpperCase();
+    const INVENTORY_STATUS_MAP = {
+      DRAFT: "DRAFT",
+      ACTIVE: "ACTIVE",
+      ARCHIVED: "ARCHIVED",
+      DELETED: "DELETED"
+    }
+    productStatusCondition = INVENTORY_STATUS_MAP[safeStatus] ? { status: safeStatus } : {};
+  }
 
   // 3. Retrieve the issue data, as well as the affected products and variants, for this store.
   const issues = await db.issue.findMany({
@@ -108,11 +116,15 @@ export async function getIssues({ shopId, search, priority, productStatus }) {
       }
     });
 
-    // Map the Tone/Severity Enum for your UI badge requirements
-    const severityDisplayMap = {
-      LOW: "Info",
-      MEDIUM: "Warning",
-      HIGH: "Critical",
+    const categoryMapIcon = {
+      content: "content",
+      inventory: "inventory",
+      media: "image",
+      organization: "organization",
+      pricing: "money",
+      product: "product",
+      seo: "search-resource",
+      variant: "variant",
     };
 
     return {
@@ -120,34 +132,20 @@ export async function getIssues({ shopId, search, priority, productStatus }) {
       slug: issue.slug,
       name: issue.name,
       description: issue.description,
+      category: issue.category,
+      severity: issue.severity,
+      priority: issue.priority,
+      tone: issue.tone,
+      categoryIcon: categoryMapIcon[issue.category],
       productsCount: affectedProductIds.size,
       variantsCount: affectedVariantIds.size,
       variantIds: [...affectedVariantIds],
       productIds: [...affectedProductIds],
-      severity: severityDisplayMap[issue.severity],
-      priority: issue.priority,
-      tone: issue.tone,
     };
   });
 
   // Optional: If you want to hide issues currently affecting 0 products
   return formattedIssues.filter((issue) => issue.productsCount > 0);
-
-  // return { issues, issueWhere, productStatusCondition, shopId };
-  // const issues = await db.Issue.findMany({
-  //   include: {
-  //     productIssues: true,
-  //     variantIssues: true,
-  //     _count: {
-  //       select: {
-  //         productIssues: true,
-  //         variantIssues: true,
-  //       },
-  //     },
-  //   }
-  // });
-
-  // return issues;
 }
 
 export async function getIssueDetailsById({ id, page = 1, pageSize = 10 }) {

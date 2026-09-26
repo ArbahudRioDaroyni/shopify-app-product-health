@@ -17,13 +17,13 @@ import styles from "../styles.css?url";
 export const links = () => [{ rel: "stylesheet", href: styles }];
 
 /** Selectable product status values, validated by `loader` before the Prisma query. */
-const PRODUCT_STATUS_FILTERS_NEW = ["all", "active", "draft", "archived"];
+const PRODUCT_STATUS_FILTERS = ["all", "active", "draft", "archived"];
 
 /** Selectable issue priority values, mapped by `getIssues` to the Prisma priority enum. */
 const PRIORITY_FILTERS = ["all", "improvement", "needs_attention", "critical"];
 
 /** Delay in milliseconds before buffered filter changes reach the URL and re-run the loader. */
-const FILTER_DEBOUNCE_DELAY = 500;
+const DEBOUNCE_DELAY = 500;
 
 /** Form intent handled by `action` to resolve product details for a popover. */
 const PRODUCT_DETAILS_INTENT = "product-details";
@@ -77,17 +77,8 @@ export async function loader({ request }) {
   const search = url.searchParams.get("search") || "";
   /** Selected issue priority; defaults to `all`. */
   const priority = url.searchParams.get("priority") || "all";
-
-  /** Reads and validates the `status` query param, falling back to `all`. */
-  const getProductStatus = () => {
-    const rawProductStatus = url.searchParams.get("status") || "all";
-    const isValidStatus = PRODUCT_STATUS_FILTERS_NEW.some(
-      (filter) => filter === rawProductStatus.toLowerCase(),
-    );
-    return isValidStatus ? rawProductStatus : "all";
-  };
-  /** Validated product status filter used by the query. */
-  const productStatus = getProductStatus();
+  /** Selected product status; defaults to `all`. */
+  const productStatus = url.searchParams.get("status") || "all";
 
   /** Shop record the issues belong to. */
   const shop = await getOrCreateShop({ admin });
@@ -96,7 +87,7 @@ export async function loader({ request }) {
     shopId: shop.id,
     search,
     priority,
-    productStatus: productStatus.toUpperCase(),
+    productStatus,
   });
 
   return { issues, search, priority, productStatus };
@@ -159,7 +150,7 @@ export default function Issues() {
           },
           { preventScrollReset: true },
         );
-      }, FILTER_DEBOUNCE_DELAY),
+      }, DEBOUNCE_DELAY),
     [],
   );
 
@@ -250,8 +241,8 @@ export default function Issues() {
 
   /** POSTs the `product-details` intent for the product popover; skips cached IDs. */
   const handleProductPopoverShow = (productIds = []) => {
-		console.log(productDetailsById);
-		
+    console.log(productDetailsById);
+
     const uncachedIds = getUncachedIds(
       productIds,
       productDetailsById,
@@ -271,8 +262,8 @@ export default function Issues() {
 
   /** POSTs the `variant-details` intent for the variant popover; skips cached IDs. */
   const handleVariantPopoverShow = (variantIds = []) => {
-		console.log(variantDetailsById);
-		
+    console.log(variantDetailsById);
+
     const uncachedIds = getUncachedIds(
       variantIds,
       variantDetailsById,
@@ -311,13 +302,13 @@ export default function Issues() {
             >
               {/* Product status filter menu. */}
               <s-button commandFor="product-status-menu" disabled={isLoading}>
-                {`Status: ${toTitleCase(PRODUCT_STATUS_FILTERS_NEW.find((f) => f === activeStatusFilter))}`}
+                {`Status: ${toTitleCase(PRODUCT_STATUS_FILTERS.find((f) => f === activeStatusFilter)) || "All"}`}
               </s-button>
               <s-menu
                 id="product-status-menu"
                 accessibilityLabel="Filter Product Status Menu Actions"
               >
-                {PRODUCT_STATUS_FILTERS_NEW.map((filter) => (
+                {PRODUCT_STATUS_FILTERS.map((filter) => (
                   <s-button
                     key={filter}
                     icon={activeStatusFilter === filter ? "check" : undefined}
@@ -330,7 +321,7 @@ export default function Issues() {
               </s-menu>
               {/* Priority filter menu. */}
               <s-button commandFor="priority-menu" disabled={isLoading}>
-                {`Priority: ${toTitleCase(PRIORITY_FILTERS.find((f) => f === activePriorityFilter))}`}
+                {`Priority: ${toTitleCase(PRIORITY_FILTERS.find((f) => f === activePriorityFilter)) || "All"}`}
               </s-button>
               <s-menu
                 id="priority-menu"
@@ -359,10 +350,16 @@ export default function Issues() {
             </s-grid>
             {/* Issue, affected products, affected variants, priority. */}
             <s-table-header-row>
-              <s-table-header listSlot="primary">Issue</s-table-header>
-              <s-table-header listSlot="inline">Products</s-table-header>
-              <s-table-header listSlot="inline">Variants</s-table-header>
-              <s-table-header listSlot="labeled">Priority</s-table-header>
+              <s-table-header listSlot="primary">
+                <s-stack paddingBlock="small-300">
+                  <s-text>Issue</s-text>
+                </s-stack>
+              </s-table-header>
+              <s-table-header listSlot="secondary">Products</s-table-header>
+              <s-table-header listSlot="secondary">Variants</s-table-header>
+              <s-table-header listSlot="kicker">Priority</s-table-header>
+              <s-table-header listSlot="labeled">Category</s-table-header>
+              <s-table-header listSlot="inline">Action</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {issues.length > 0 ? (
@@ -424,7 +421,8 @@ export default function Issues() {
                               {(issue.productIds || [])
                                 .slice(0, 3)
                                 .map((productId) => {
-                                  const _isPending = productFetcher.state !== "idle";
+                                  const _isPending =
+                                    productFetcher.state !== "idle";
                                   const product =
                                     productDetailsById[String(productId)];
 
@@ -547,10 +545,14 @@ export default function Issues() {
                                             gap="small-200"
                                           >
                                             <s-thumbnail
-                                              src={variant?.image?.url || undefined}
+                                              src={
+                                                variant?.media?.nodes[0]
+                                                  ?.preview?.image?.url ||
+                                                undefined
+                                              }
                                               alt={
-                                                variant?.image?.altText ||
-                                                variant?.title ||
+                                                variant?.media?.nodes[0]
+                                                  ?.preview?.image?.altText ||
                                                 "Variant image"
                                               }
                                               size="small"
@@ -581,6 +583,28 @@ export default function Issues() {
                       <s-badge tone={issue.tone}>
                         {toTitleCase(issue.priority)}
                       </s-badge>
+                    </s-table-cell>
+                    {/* Category issue */}
+                    <s-table-cell>
+                      <s-chip
+                        color="subdued"
+                        accessibilityLabel="Product category"
+                      >
+                        <s-icon
+                          slot="graphic"
+                          type={issue.categoryIcon}
+                          size="small"
+                        ></s-icon>
+                        {toTitleCase(issue.category)}
+                      </s-chip>
+                    </s-table-cell>
+                    {/* Actions */}
+                    <s-table-cell>
+                      <s-button
+                        icon="view"
+                        variant="tertiary"
+                        accessibilityLabel="Preview product"
+                      ></s-button>
                     </s-table-cell>
                   </s-table-row>
                 ))
