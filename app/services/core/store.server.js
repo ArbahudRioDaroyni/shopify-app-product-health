@@ -10,7 +10,7 @@ export async function saveBulkCatalogScan({ shopId, scanResults, scanType = "ful
   const startedAt = new Date();
 
   try {
-    await updateShopScanStatus({shopId, status: "IN_PROGRESS"});
+    await updateShopScanStatus({shopId, status: "PROCESSING"});
 
     const snapshot = await db.$transaction(async (tx) => {
       await tx.productIssue.deleteMany({});

@@ -39,7 +39,7 @@ export const loader = async ({ request }) => {
 
   return {
     monthlyDashboardData,
-    isUpdating: shop.scanStatus === "IN_PROGRESS",
+    isUpdating: shop.scanStatus === "PROCESSING",
     issueTrends
   };
 };

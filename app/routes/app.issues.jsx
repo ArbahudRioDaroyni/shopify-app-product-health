@@ -11,6 +11,7 @@ import { getOrCreateShop } from "../services/models/shop.server";
 import { getProductsDetailsByIds } from "../services/models/product.server";
 import { getVariantsDetailsByIds } from "../services/models/variant.server";
 import { customDebounce, toTitleCase } from "../utils/formatters";
+import ButtonFilter from "../components/button-filter";
 import styles from "../styles.css?url";
 
 /** Style sheet link descriptor consumed by React Router. */
@@ -102,14 +103,6 @@ export default function Issues() {
   const navigation = useNavigation();
   /** True while the loader for the latest filter change is still running. */
   const isLoading = navigation.state === "loading";
-  /** Product status shown as selected; seeded from the loader data. */
-  const [activeStatusFilter, setActiveStatusFilter] = useState(
-    String(productStatus),
-  );
-  /** Priority shown as selected; seeded from the loader data. */
-  const [activePriorityFilter, setActivePriorityFilter] = useState(
-    String(priority),
-  );
   /** Search text displayed in the field; seeded from the loader data. */
   const [activeSearchFilter, setSearchFilter] = useState(String(search));
 
@@ -214,18 +207,6 @@ export default function Issues() {
     queueParamUpdate("search", value);
   };
 
-  /** Sets the priority filter instantly, then debounces the `priority` param. */
-  const handlePriorityFilter = (value) => {
-    setActivePriorityFilter(value);
-    queueParamUpdate("priority", value);
-  };
-
-  /** Sets the status filter instantly, then debounces the `status` param. */
-  const handleProductStatusFilter = (value) => {
-    setActiveStatusFilter(value);
-    queueParamUpdate("status", value);
-  };
-
   /** Keeps only the IDs that are neither cached nor already returned by a productFetcher. */
   const getUncachedIds = (ids, cache, inFlight) => [
     ...new Set(
@@ -301,43 +282,9 @@ export default function Issues() {
               gridTemplateColumns="auto auto 1fr"
             >
               {/* Product status filter menu. */}
-              <s-button commandFor="product-status-menu" disabled={isLoading}>
-                {`Status: ${toTitleCase(PRODUCT_STATUS_FILTERS.find((f) => f === activeStatusFilter)) || "All"}`}
-              </s-button>
-              <s-menu
-                id="product-status-menu"
-                accessibilityLabel="Filter Product Status Menu Actions"
-              >
-                {PRODUCT_STATUS_FILTERS.map((filter) => (
-                  <s-button
-                    key={filter}
-                    icon={activeStatusFilter === filter ? "check" : undefined}
-                    onClick={() => handleProductStatusFilter(filter)}
-                    accessibilityLabel="Select product status issue for filter"
-                  >
-                    {toTitleCase(filter)}
-                  </s-button>
-                ))}
-              </s-menu>
+              <ButtonFilter data={PRODUCT_STATUS_FILTERS} selected={productStatus} title="Status" params="status" />
               {/* Priority filter menu. */}
-              <s-button commandFor="priority-menu" disabled={isLoading}>
-                {`Priority: ${toTitleCase(PRIORITY_FILTERS.find((f) => f === activePriorityFilter)) || "All"}`}
-              </s-button>
-              <s-menu
-                id="priority-menu"
-                accessibilityLabel="Issue priority filter"
-              >
-                {PRIORITY_FILTERS.map((filter) => (
-                  <s-button
-                    key={filter}
-                    icon={activePriorityFilter === filter ? "check" : undefined}
-                    onClick={() => handlePriorityFilter(filter)}
-                    accessibilityLabel="Select priority issue for filter"
-                  >
-                    {toTitleCase(filter)}
-                  </s-button>
-                ))}
-              </s-menu>
+              <ButtonFilter data={PRIORITY_FILTERS} selected={priority} title="Priority" params="priority" />
               {/* Live search on typing, immediate on Enter. */}
               <s-search-field
                 label="Search Issue"

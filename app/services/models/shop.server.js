@@ -70,7 +70,7 @@ export async function updateShopScanStatus({shopId, status, error = null}) {
     where: { id: shopId },
     data: {
       scanStatus: status,
-      scanStartedAt: status === "IN_PROGRESS" ? new Date() : undefined,
+      scanStartedAt: status === "PROCESSING" ? new Date() : undefined,
       lastScanError: error,
     },
   });

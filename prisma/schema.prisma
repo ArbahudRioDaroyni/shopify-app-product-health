@@ -61,7 +61,7 @@ model Shop {
 
 enum ScanStatus {
   IDLE
-  IN_PROGRESS
+  PROCESSING
   COMPLETED
   FAILED
 }
@@ -87,8 +87,8 @@ model Product {
   shopId        Int
   shop          Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
   title         String // deprecated: will remove, dont use!
-  status        InventoryStatus @default(ACTIVE)  // deprecated: will remove, dont use!
-  featuredImage Json?  // deprecated: will remove, dont use!
+  status        InventoryStatus @default(ACTIVE) // deprecated: will remove, dont use!
+  featuredImage Json? // deprecated: will remove, dont use!
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -114,8 +114,8 @@ model Variant {
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId, shopId], references: [id, shopId], onDelete: Cascade)
-  title     String  // deprecated: will remove, dont use!
-  sku       String?  // deprecated: will remove, dont use!
+  title     String // deprecated: will remove, dont use!
+  sku       String? // deprecated: will remove, dont use!
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -315,21 +315,28 @@ model ProductCategory {
 }
 
 model ScanJob {
-  id           String     @id @default(cuid())
+  id           String        @id @default(cuid())
   shopId       Int
-  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  type         ScanType   @default(full)
-  status       ScanStatus @default(IDLE)
+  shop         Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type         ScanType      @default(full)
+  status       ScanJobStatus @default(PENDING)
   errorMessage String?
   startedAt    DateTime?
   completedAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   scan Scan?
 
   @@index([shopId, status, createdAt])
   @@index([shopId, createdAt])
+}
+
+enum ScanJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model Scan {
@@ -338,8 +345,8 @@ model Scan {
   shop                   Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   scanJobId              String?    @unique
   scanJob                ScanJob?   @relation(fields: [scanJobId], references: [id], onDelete: SetNull)
-  status                 ScanStatus @default(IDLE)
   type                   ScanType   @default(full)
+  status                 ScanStatus @default(IDLE)
   healthScore            Int?
   totalProducts          Int        @default(0)
   healthyProducts        Int        @default(0)
