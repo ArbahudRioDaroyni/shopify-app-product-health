@@ -1,0 +1,26 @@
+Phase 4: Submit ke Shopify App Store
+Setelah aplikasi berjalan normal di produksi, kamu bisa mengajukan aplikasi ke Shopify App Store:
+
+Lengkapi Informasi App (Partner Dashboard):
+
+Masuk ke Shopify Partner Dashboard -> Apps -> Pilih App kamu.
+
+Masuk ke menu App Store listing.
+
+Isi semua info: App Name, Icon, Screenshots, Description, Pricing details, Privacy Policy URL, dan Support email.
+
+Setup Testing Credentials & Instructions:
+
+Berikan instruksi cara mengetes aplikasi untuk tim penguji (reviewer) Shopify.
+
+Jika butuh akun/akses khusus, sertakan di catatan testing.
+
+Jalankan Automated Checks:
+
+Jalankan pengujian otomatis bawaan Shopify (App Review Checklist) di Partner Dashboard.
+
+Submit for Review:
+
+Klik tombol Submit for review.
+
+Tim Shopify biasanya membutuhkan waktu sekitar 3–10 hari kerja untuk mereview aplikasi. Jika ada yang perlu diperbaiki, mereka akan mengirimkan masukan detail lewat email.

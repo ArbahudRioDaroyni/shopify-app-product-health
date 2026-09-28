@@ -9,11 +9,13 @@ import {
   shouldRunInitialScan,
 } from "../services/models/shop.server";
 import { getInitials, formatDateTime } from "../utils/formatters";
+import { triggerProductScan } from "../services/trigger/scan-product";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const shop = await getOrCreateShop({ admin });
   const isNeedsScan = await shouldRunInitialScan(shop);
+  triggerProductScan();
 
   return { shop, isNeedsScan };
 };
